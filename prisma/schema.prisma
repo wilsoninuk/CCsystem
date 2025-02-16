@@ -21,29 +21,26 @@ model User {
 
 // 商品基础信息
 model Product {
-  id          String   @id @default(cuid())
-  itemNo      String   @unique  // 商品编号
-  barcode     String   @unique  // 条形码
-  description String   // 商品描述
-  picture     String?  // 图片URL
-  color       String?  // 颜色和款式
-  material    String?  // 材质
-  productSize String?  // 产品尺寸
-  cartonSize  String?  // 箱子尺寸
-  cartonWeight Float?  // 箱子重量
-  moq         Int?     // 最小订购量
-  cost        Float    // 成本
-  supplier    String?  // 供应商
-  link1688    String?  // 1688链接
-  remark      String?  // 备注
-  isActive    Boolean  @default(true) // 商品是否有效
-  displayFields Json?  // 用户自定义显示字段
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // 关联
-  customerPrices CustomerProductPrice[] // 客户价格
-  quotationItems QuotationItem[]        // 报价单项目
+  id            String   @id @default(cuid())
+  itemNo        String   @unique
+  barcode       String   @unique
+  description   String
+  picture       String?
+  color         String?  // 改为 color
+  material      String?
+  productSize   String?
+  cartonSize    String?
+  cartonWeight  Float?
+  moq           Int?
+  cost          Float
+  supplier      String?
+  link1688      String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customerPrices CustomerProductPrice[]
+  quotationItems QuotationItem[]
 }
 
 // 客户信息

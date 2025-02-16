@@ -1,5 +1,7 @@
 "use client"
 
+import * as React from "react"
+
 import {
   ColumnDef,
   flexRender,
@@ -7,6 +9,7 @@ import {
   useReactTable,
   getPaginationRowModel,
   getFilteredRowModel,
+  getExpandedRowModel,
 } from "@tanstack/react-table"
 
 import {
@@ -25,12 +28,14 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   searchKey: string
+  renderSubComponent?: ({ row }: { row: any }) => React.ReactNode
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   searchKey,
+  renderSubComponent
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
@@ -38,6 +43,7 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
   })
 
   return (
@@ -72,16 +78,25 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <React.Fragment key={row.id}>
+                  <TableRow>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  {row.getIsExpanded() && renderSubComponent && (
+                    <TableRow key={`${row.id}-expanded`}>
+                      <TableCell colSpan={columns.length}>
+                        {renderSubComponent({ row })}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))
             ) : (
               <TableRow>
