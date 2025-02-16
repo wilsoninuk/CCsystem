@@ -12,7 +12,17 @@ const nextConfig = {
         hostname: 'picsum.photos'
       }
     ]
-  }
+  },
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      stream: require.resolve('stream-browserify'),
+      fs: false,
+      net: false,
+      tls: false,
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig 
