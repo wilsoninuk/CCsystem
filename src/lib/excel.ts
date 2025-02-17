@@ -76,17 +76,24 @@ export async function exportToExcel(products: Product[]) {
     // 如果有图片，添加图片
     if (product.picture) {
       try {
-        // 获取图片数据
-        const imageResponse = await fetch(product.picture)
+        // 使用代理 API 获取图片
+        const imageUrl = product.picture.startsWith('http') 
+          ? `/api/image?url=${encodeURIComponent(product.picture)}`
+          : product.picture
+
+        const imageResponse = await fetch(imageUrl)
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to fetch image: ${imageResponse.status}`)
+        }
+
         const imageArrayBuffer = await imageResponse.arrayBuffer()
         const imageId = workbook.addImage({
           buffer: Buffer.from(imageArrayBuffer),
           extension: 'jpeg',
         })
 
-        // 添加图片到单元格
         worksheet.addImage(imageId, {
-          tl: { col: 3, row: rowNumber - 1 }, // 图片列是第4列（索引3）
+          tl: { col: 3, row: rowNumber - 1 },
           br: { col: 4, row: rowNumber },
           editAs: 'oneCell'
         })
@@ -173,6 +180,11 @@ export async function generateTemplate() {
 export async function importFromExcel(file: File) {
   return new Promise<{
     success: Partial<Product>[]
+    duplicates: {
+      product: Partial<Product>
+      existingProduct: Product
+      reason: 'itemNo' | 'barcode'
+    }[]
     errors: { row: number; error: string }[]
   }>(async (resolve, reject) => {
     try {
@@ -187,6 +199,11 @@ export async function importFromExcel(file: File) {
 
       const result = {
         success: [] as Partial<Product>[],
+        duplicates: [] as {
+          product: Partial<Product>
+          existingProduct: Product
+          reason: 'itemNo' | 'barcode'
+        }[],
         errors: [] as { row: number; error: string }[]
       }
 
@@ -235,6 +252,31 @@ export async function importFromExcel(file: File) {
           })
         }
       })
+
+      // 检查重复项
+      try {
+        const response = await fetch('/api/products/check-duplicates', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(result.success)
+        })
+
+        if (!response.ok) {
+          throw new Error('检查重复失败')
+        }
+
+        const duplicates = await response.json()
+        
+        // 将重复项从 success 移到 duplicates
+        result.duplicates = duplicates
+        result.success = result.success.filter(product => 
+          !duplicates.some(d => d.product.itemNo === product.itemNo)
+        )
+      } catch (error) {
+        console.error('检查重复失败:', error)
+      }
 
       resolve(result)
     } catch (error) {

@@ -29,6 +29,11 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
   const [isImporting, setIsImporting] = useState(false)
   const [previewData, setPreviewData] = useState<{
     success: Partial<Product>[]
+    duplicates: {
+      product: Partial<Product>
+      existingProduct: Product
+      reason: 'itemNo' | 'barcode'
+    }[]
     errors: { row: number; error: string }[]
   } | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -96,14 +101,21 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
   }
 
   // 确认导入
-  const handleConfirmImport = async () => {
-    if (!previewData?.success.length) return
+  const handleConfirmImport = async (includeDuplicates: boolean) => {
+    if (!previewData) return
 
     try {
+      const productsToImport = includeDuplicates 
+        ? [...previewData.success, ...previewData.duplicates.map(d => d.product)]
+        : previewData.success
+
       const response = await fetch('/api/products/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(previewData.success)
+        body: JSON.stringify({
+          products: productsToImport,
+          updateDuplicates: includeDuplicates
+        })
       })
 
       const result = await response.json()

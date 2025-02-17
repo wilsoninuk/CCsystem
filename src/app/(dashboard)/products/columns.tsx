@@ -18,9 +18,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { TableMeta } from "@tanstack/react-table"
 
-// 首先在文件顶部添加正确的类型定义
+// 只使用自定义的 TableMeta 类型定义
 type TableMeta<TData> = {
   updateData: (rowIndex: number, updatedProduct: TData) => void
 }
@@ -237,6 +236,39 @@ export const actionColumn: ColumnDef<Product> = {
       setSelectedFile(null)
     }
 
+    // 添加删除处理函数
+    const handleDelete = async () => {
+      if (!confirm(`确定要删除商品 "${product.itemNo}" 吗？此操作不可恢复！`)) {
+        return
+      }
+
+      try {
+        const response = await fetch('/api/products/batch', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            itemNos: [product.itemNo]
+          })
+        })
+
+        const result = await response.json()
+        
+        if (result.success) {
+          // 使用 window.location.reload() 刷新页面
+          // 这样可以避免状态管理的复杂性
+          window.location.reload()
+          toast.success('删除成功')
+        } else {
+          toast.error(result.error || '删除失败')
+        }
+      } catch (error) {
+        console.error('删除失败:', error)
+        toast.error('删除失败，请重试')
+      }
+    }
+
     return (
       <div className="flex items-center gap-2">
         <Link href={`/products/${product.id}/edit`}>
@@ -309,7 +341,12 @@ export const actionColumn: ColumnDef<Product> = {
           </DialogContent>
         </Dialog>
 
-        <Button variant="outline" size="sm" className="text-red-500">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+          onClick={handleDelete}
+        >
           <Trash className="h-4 w-4" />
         </Button>
       </div>
