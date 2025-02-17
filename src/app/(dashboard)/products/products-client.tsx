@@ -22,20 +22,45 @@ interface ProductsClientProps {
   products: Product[]
 }
 
-export function ProductsClient({ products }: ProductsClientProps) {
+export function ProductsClient({ products: initialProducts }: ProductsClientProps) {
+  const [products, setProducts] = useState(initialProducts)
+  const [selectedRows, setSelectedRows] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [previewData, setPreviewData] = useState<{
     success: Partial<Product>[]
     errors: { row: number; error: string }[]
   } | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+  const handleProductUpdate = (updatedProduct: Product) => {
+    setProducts(prev => 
+      prev.map(p => 
+        p.itemNo === updatedProduct.itemNo ? updatedProduct : p
+      )
+    )
+  }
 
   // 处理导出
   const handleExport = () => {
     try {
-      exportToExcel(products)
-      toast.success('导出成功')
+      if (selectedRows.length > 0) {
+        // 使用 itemNo 而不是 id 来筛选商品
+        const selectedProducts = products.filter(p => selectedRows.includes(p.itemNo))
+        if (selectedProducts.length === 0) {
+          toast.error('未找到选中的商品')
+          return
+        }
+        exportToExcel(selectedProducts)
+        toast.success(`成功导出 ${selectedProducts.length} 个商品`)
+      } else {
+        if (confirm('是否导出全部商品？')) {
+          exportToExcel(products)
+          toast.success(`成功导出 ${products.length} 个商品`)
+        }
+      }
     } catch (error) {
+      console.error('导出失败:', error)
       toast.error('导出失败')
     }
   }
@@ -47,11 +72,8 @@ export function ProductsClient({ products }: ProductsClientProps) {
 
     setIsImporting(true)
     try {
-      // 1. 解析 Excel 文件
-      console.log('开始解析文件:', file.name)
       const result = await importFromExcel(file)
       
-      // 检查是否有错误
       if (result.errors.length > 0) {
         const errorMessage = result.errors
           .map(e => `第 ${e.row} 行: ${e.error}`)
@@ -61,6 +83,7 @@ export function ProductsClient({ products }: ProductsClientProps) {
       }
 
       setPreviewData(result)
+      setIsPreviewOpen(true)
     } catch (error) {
       console.error('导入错误:', error)
       toast.error('导入失败：' + (error as Error).message)
@@ -85,11 +108,7 @@ export function ProductsClient({ products }: ProductsClientProps) {
 
       const result = await response.json()
       
-      if (!response.ok) {
-        throw new Error(result.error || '保存数据失败')
-      }
-
-      if (!result.success) {
+      if (!response.ok || !result.success) {
         throw new Error(result.error || '保存数据失败')
       }
 
@@ -102,118 +121,147 @@ export function ProductsClient({ products }: ProductsClientProps) {
       toast.error('保存失败：' + (error as Error).message)
     } finally {
       setPreviewData(null)
+      setIsPreviewOpen(false)
+    }
+  }
+
+  // 处理删除
+  const handleDelete = async () => {
+    if (!selectedRows.length) {
+      toast.error('请先选择要删除的商品')
+      return
+    }
+    
+    if (!confirm(`确定要删除选中的 ${selectedRows.length} 个商品吗？此操作不可恢复！`)) {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/products/batch', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          itemNos: selectedRows
+        })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setProducts(products.filter(p => !selectedRows.includes(p.itemNo)))
+        setSelectedRows([])
+        toast.success(`成功删除 ${result.count} 个商品`)
+      } else {
+        toast.error(result.error || '删除失败')
+      }
+    } catch (error) {
+      console.error('删除失败:', error)
+      toast.error('删除失败，请重试')
     }
   }
 
   return (
-    <ColumnVisibilityProvider>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">商品管理</h1>
-          
-          <div className="flex items-center gap-2">
-            <ColumnVisibility />
+    <div className="hidden h-full flex-1 flex-col space-y-8 p-8 md:flex">
+      <ColumnVisibilityProvider>
+        <div className="flex items-center justify-between space-y-2">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">商品管理</h2>
+            <p className="text-muted-foreground">
+              管理所有商品信息，包括基本信息、图片、价格等
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            {/* 工具栏按钮 */}
+            <Link href="/products/new">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                新增
+              </Button>
+            </Link>
             
-            {/* 批量操作按钮 */}
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleExport}
-            >
+            {selectedRows.length > 0 && (
+              <Button variant="destructive" onClick={handleDelete}>
+                <Trash className="mr-2 h-4 w-4" />
+                删除
+              </Button>
+            )}
+
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               导出
             </Button>
 
             <Dialog>
               <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                >
+                <Button variant="outline">
                   <Upload className="mr-2 h-4 w-4" />
                   导入
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
+              <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>导入商品数据</DialogTitle>
+                  <DialogTitle>导入商品</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <h3 className="font-medium">导入说明：</h3>
-                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                      <li>请使用Excel格式文件（.xlsx或.xls）</li>
-                      <li>文件大小不超过10MB</li>
+                <div className="space-y-4">
+                  {/* 导入规则说明 */}
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <h3 className="font-medium text-foreground">导入说明：</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>请先下载模板，按模板格式填写商品信息</li>
                       <li>商品编号、商品描述、成本为必填项</li>
-                      <li>成本请填写数字，最多保留2位小数</li>
-                      <li>装箱重量请填写数字，单位为kg</li>
-                      <li>MOQ请填写整数</li>
-                      <li>图片支持URL链接或Base64格式</li>
-                      <li>图片将自动压缩至200px，文件大小不超过100KB</li>
+                      <li>成本、装箱重量、MOQ必须为数字</li>
+                      <li>如果商品编号已存在，将更新对应商品信息</li>
+                      <li>图片需要单独上传，不支持通过Excel导入</li>
                     </ul>
                   </div>
-                  
-                  <div className="flex items-center gap-4">
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          await generateTemplate()
-                        } catch (error) {
-                          toast.error('下载模板失败')
-                        }
-                      }}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
+
+                  <div className="flex justify-between">
+                    <Button variant="outline" onClick={() => generateTemplate()}>
                       下载模板
                     </Button>
-                    
-                    <div>
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        className="hidden"
-                        ref={fileInputRef}
-                        onChange={handleImport}
-                      />
-                      <Button 
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isImporting}
-                      >
-                        <Upload className="mr-2 h-4 w-4" />
-                        {isImporting ? '导入中...' : '选择文件并导入'}
-                      </Button>
-                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx"
+                      className="hidden"
+                      onChange={handleImport}
+                      disabled={isImporting}
+                    />
+                    <Button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isImporting}
+                    >
+                      {isImporting ? '导入中...' : '选择文件'}
+                    </Button>
                   </div>
                 </div>
               </DialogContent>
             </Dialog>
 
-            <Button variant="outline" size="sm" className="text-red-500">
-              <Trash className="mr-2 h-4 w-4" />
-              批量删除
-            </Button>
-            
-            <Link href="/products/new">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                添加商品
-              </Button>
-            </Link>
+            <ColumnVisibility />
           </div>
         </div>
-        
-        <ProductsTable products={products} />
-        
-        {previewData && (
-          <ImportPreviewDialog
-            isOpen={!!previewData}
-            onClose={() => setPreviewData(null)}
-            onConfirm={handleConfirmImport}
-            previewData={previewData}
-          />
-        )}
-      </div>
-    </ColumnVisibilityProvider>
+
+        <ProductsTable 
+          products={products}
+          selectedRows={selectedRows}
+          onSelectedRowsChange={setSelectedRows}
+          onProductUpdate={handleProductUpdate}
+        />
+
+        {/* 导入预览对话框 */}
+        <ImportPreviewDialog
+          data={previewData}
+          isOpen={isPreviewOpen}
+          onConfirm={handleConfirmImport}
+          onCancel={() => {
+            setIsPreviewOpen(false)
+            setPreviewData(null)
+          }}
+        />
+      </ColumnVisibilityProvider>
+    </div>
   )
 } 

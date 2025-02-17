@@ -10,13 +10,16 @@ export async function GET(request: Request) {
 
   try {
     const response = await fetch(imageUrl)
-    const blob = await response.blob()
-    const arrayBuffer = await blob.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`)
+    }
+    
+    const buffer = await response.arrayBuffer()
+    const contentType = response.headers.get('content-type') || 'image/jpeg'
 
     return new NextResponse(buffer, {
       headers: {
-        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+        'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000',
       },
     })

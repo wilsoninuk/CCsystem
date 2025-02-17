@@ -3,12 +3,27 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { Product } from "@prisma/client"  // 使用 Prisma 生成的类型
 import { Button } from "@/components/ui/button"
-import { Edit, Trash, ChevronDown, ChevronRight, ArrowUpDown } from "lucide-react"
+import { Edit, Trash, ChevronDown, ChevronRight, ArrowUpDown, Upload } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ProductImage } from "@/components/ui/image"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import { toast } from "sonner"
+import { TableMeta } from "@tanstack/react-table"
+
+// 首先在文件顶部添加正确的类型定义
+type TableMeta<TData> = {
+  updateData: (rowIndex: number, updatedProduct: TData) => void
+}
 
 // 基础列 - 始终显示
 export const baseColumns: ColumnDef<Product>[] = [
@@ -32,28 +47,41 @@ export const baseColumns: ColumnDef<Product>[] = [
     enableSorting: false,
     enableHiding: false,
   },
+  // 商品编号列
   {
     accessorKey: "itemNo",
-    header: "商品编号",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          商品编号
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      )
+    },
+    cell: ({ row }) => {
+      return (
+        <div className="font-medium">
+          {row.getValue("itemNo")}
+        </div>
+      )
+    },
   },
   {
     accessorKey: "picture",
     header: "商品图片",
     cell: ({ row }) => {
-      const picture = row.original.picture
-      return picture ? (
-        <div className="w-20 h-20">
+      return (
+        <div className="relative w-20 h-20">
           <ProductImage
-            src={picture}
+            src={row.original.picture}
             alt={row.original.description || "商品图片"}
           />
         </div>
-      ) : (
-        <div className="w-20 h-20 flex items-center justify-center border rounded-md bg-gray-50">
-          <span className="text-sm text-gray-400">无图片</span>
-        </div>
       )
-    },
+    }
   },
   {
     accessorKey: "description",
@@ -136,12 +164,79 @@ export const optionalColumns: ColumnDef<Product>[] = [
   },
 ]
 
-// 操作列 - 始终显示在最后
+// 操作列
 export const actionColumn: ColumnDef<Product> = {
   id: "actions",
   header: "操作",
-  cell: ({ row }) => {
+  cell: ({ row, table }) => {
     const product = row.original
+    const [isUploading, setIsUploading] = useState(false)
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [previewUrl, setPreviewUrl] = useState<string | null>(product.picture)
+    const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
+    const [isOpen, setIsOpen] = useState(false)
+
+    // 处理文件选择和预览
+    const handleFileSelect = (file: File) => {
+      setSelectedFile(file)
+      const localUrl = URL.createObjectURL(file)
+      setLocalPreviewUrl(localUrl)
+    }
+
+    // 处理图片上传
+    const handleUpload = async () => {
+      if (!selectedFile) return
+
+      try {
+        setIsUploading(true)
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        formData.append('itemNo', product.itemNo)
+
+        const response = await fetch('/api/products/upload-image', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || '上传失败')
+        }
+
+        // 更新表格数据
+        const updatedProduct = { ...product, picture: data.url }
+        ;(table.options.meta as TableMeta<Product>).updateData(row.index, updatedProduct)
+        setPreviewUrl(data.url)
+        toast.success('上传成功')
+        setIsOpen(false) // 关闭对话框
+
+      } catch (error) {
+        console.error('Upload error:', error)
+        setPreviewUrl(product.picture) // 恢复原图片
+        toast.error(error instanceof Error ? error.message : '上传失败，请重试')
+      } finally {
+        setIsUploading(false)
+        // 清理本地预览URL和选中的文件
+        if (localPreviewUrl) {
+          URL.revokeObjectURL(localPreviewUrl)
+          setLocalPreviewUrl(null)
+        }
+        setSelectedFile(null)
+      }
+    }
+
+    // 处理对话框关闭
+    const handleDialogClose = () => {
+      setIsOpen(false)
+      // 清理预览
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl)
+        setLocalPreviewUrl(null)
+      }
+      setSelectedFile(null)
+    }
+
     return (
       <div className="flex items-center gap-2">
         <Link href={`/products/${product.id}/edit`}>
@@ -149,6 +244,71 @@ export const actionColumn: ColumnDef<Product> = {
             <Edit className="h-4 w-4" />
           </Button>
         </Link>
+
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Upload className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>上传商品图片</DialogTitle>
+              <DialogDescription>
+                请选择要上传的商品图片，预览确认后点击上传
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* 上传规则说明 */}
+              <div className="text-sm text-muted-foreground space-y-1">
+                <h3 className="font-medium text-foreground">上传要求：</h3>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>支持 JPG、PNG、GIF、WebP 格式</li>
+                  <li>文件大小不超过 5MB</li>
+                  <li>图片将自动调整为最大 800×800 像素</li>
+                  <li>建议使用清晰的产品实拍图</li>
+                </ul>
+              </div>
+
+              {/* 预览区域 */}
+              <div className="w-40 h-40 mx-auto">
+                <ProductImage 
+                  src={localPreviewUrl || previewUrl}
+                  alt={product.description || "商品图片"}
+                />
+              </div>
+
+              {/* 按钮区域 */}
+              <div className="flex justify-center gap-4">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  id={`upload-${product.id}`}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handleFileSelect(file)
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    document.getElementById(`upload-${product.id}`)?.click()
+                  }}
+                >
+                  选择图片
+                </Button>
+                <Button
+                  onClick={handleUpload}
+                  disabled={isUploading || !selectedFile}
+                >
+                  {isUploading ? '上传中...' : '确认上传'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Button variant="outline" size="sm" className="text-red-500">
           <Trash className="h-4 w-4" />
         </Button>
@@ -188,43 +348,15 @@ export const columns: ColumnDef<Product>[] = [
   actionColumn
 ]
 
-// 修改 getVisibleColumns 函数，添加展开功能
-export function getVisibleColumns(selectedKeys: string[]) {
+// 获取可见列
+export function getVisibleColumns(selectedColumns: string[]) {
   return [
-    // 选择列
-    baseColumns[0],
-    // 展开器列
-    {
-      id: "expander",
-      header: () => null,
-      cell: ({ row }: { row: any }) => {
-        const [isExpanded, setIsExpanded] = useState(false)
-        return (
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => {
-              row.toggleExpanded()
-              setIsExpanded(!isExpanded)
-            }}
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </Button>
-        )
-      },
-    },
-    // 其他基础列
-    ...baseColumns.slice(1),
-    // 可选列
+    columns[0], // expander
+    ...baseColumns, // 基础列（包括 itemNo）
     ...optionalColumns.filter(col => {
       const column = col as { accessorKey?: string }
-      return column.accessorKey && selectedKeys.includes(column.accessorKey)
+      return column.accessorKey && selectedColumns.includes(column.accessorKey)
     }),
-    // 操作列
     actionColumn
   ]
 }

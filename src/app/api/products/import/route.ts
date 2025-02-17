@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
-import { Product } from "@prisma/client"
-import { Prisma } from '@prisma/client'
+import { Product, Prisma } from '@prisma/client'
+
+// 将函数声明移到块外部
+const generateBarcode = (itemNo: string): string => {
+  // 使用时间戳和随机数生成唯一条形码
+  const timestamp = Date.now().toString().slice(-6)
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+  return `${itemNo}${timestamp}${random}`
+}
 
 export async function POST(request: Request) {
   try {
@@ -43,12 +50,12 @@ export async function POST(request: Request) {
           in: itemNos
         }
       },
-      select: { itemNo: true }
+      select: { itemNo: true, barcode: true }
     })
 
     const existingItemNos = new Set(existingProducts.map(p => p.itemNo))
-    const newProducts = []
-    const updateProducts = []
+    const newProducts: Prisma.ProductCreateInput[] = []
+    const updateProducts: Prisma.ProductUpdateInput[] = []
 
     // 分离新增和更新的商品
     products.forEach(product => {
@@ -57,7 +64,7 @@ export async function POST(request: Request) {
         description: product.description,
         cost: Number(product.cost),
         picture: product.picture || null,
-        barcode: product.barcode || null,
+        barcode: product.barcode || generateBarcode(product.itemNo),
         color: product.color || null,
         material: product.material || null,
         productSize: product.productSize || null,
@@ -69,7 +76,9 @@ export async function POST(request: Request) {
       }
 
       if (existingItemNos.has(product.itemNo)) {
-        updateProducts.push(formattedProduct)
+        // 更新时不更新条形码
+        const { barcode, ...updateData } = formattedProduct
+        updateProducts.push(updateData)
       } else {
         newProducts.push(formattedProduct)
       }
@@ -85,7 +94,7 @@ export async function POST(request: Request) {
         const updateResults = await Promise.all(
           updateProducts.map(product => 
             tx.product.update({
-              where: { itemNo: product.itemNo },
+              where: { itemNo: product.itemNo as string },
               data: {
                 ...product,
                 updatedAt: new Date()
@@ -117,6 +126,14 @@ export async function POST(request: Request) {
       })
     } catch (error) {
       console.error('数据库操作失败:', error)
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          return NextResponse.json({
+            success: false,
+            error: '存在重复的商品编号或条形码'
+          }, { status: 409 })
+        }
+      }
       throw error
     }
   } catch (error) {

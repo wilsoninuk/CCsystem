@@ -1,30 +1,28 @@
 "use client"
 
-import Image from 'next/image'
+import Image from "next/image"
 
 interface ProductImageProps {
-  src: string
+  src: string | null
   alt: string
-  className?: string
 }
 
-export function ProductImage({ src, alt, className }: ProductImageProps) {
+export function ProductImage({ src, alt }: ProductImageProps) {
   if (!src) {
     return (
-      <div className="relative aspect-square flex items-center justify-center bg-gray-50 rounded-md">
+      <div className="w-full h-full flex items-center justify-center border rounded-md bg-gray-50">
         <span className="text-sm text-gray-400">无图片</span>
       </div>
     )
   }
 
   return (
-    <div className="relative aspect-square">
+    <div className="relative aspect-square w-full h-full">
       <Image
         src={src}
         alt={alt}
         fill
-        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-        className={`object-cover rounded-md ${className || ''}`}
+        className="object-cover"
       />
     </div>
   )

@@ -11,33 +11,32 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Product } from "@prisma/client"
 
 interface ImportPreviewDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onConfirm: () => void
-  previewData: {
+  data: {
     success: Partial<Product>[]
     errors: { row: number; error: string }[]
-  }
+  } | null
+  onConfirm: () => void
+  onCancel: () => void
+  isOpen: boolean
 }
 
 export function ImportPreviewDialog({
-  isOpen,
-  onClose,
+  data,
   onConfirm,
-  previewData
+  onCancel,
+  isOpen
 }: ImportPreviewDialogProps) {
-  const { success, errors } = previewData
+  if (!data) return null
+
+  const { success, errors } = data
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={onCancel}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>导入预览</DialogTitle>
           <DialogDescription>
-            请确保：
-            1. Excel 文件中的图片是直接粘贴到单元格中的
-            2. 图片格式为 JPG 或 PNG
-            3. 图片大小不超过 2MB
+            请确认导入的数据是否正确
           </DialogDescription>
         </DialogHeader>
 
@@ -71,6 +70,7 @@ export function ImportPreviewDialog({
                       <th className="p-2 text-left">商品编号</th>
                       <th className="p-2 text-left">商品描述</th>
                       <th className="p-2 text-left">成本</th>
+                      <th className="p-2 text-left">图片</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -79,6 +79,7 @@ export function ImportPreviewDialog({
                         <td className="p-2">{product.itemNo}</td>
                         <td className="p-2">{product.description}</td>
                         <td className="p-2">{product.cost}</td>
+                        <td className="p-2">{product.picture ? '有' : '无'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -89,7 +90,7 @@ export function ImportPreviewDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onCancel}>
             取消
           </Button>
           <Button 
