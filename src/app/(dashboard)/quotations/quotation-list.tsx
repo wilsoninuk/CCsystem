@@ -1,7 +1,16 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { DataTable } from "@/components/ui/data-table"
 import { ColumnDef } from "@tanstack/react-table"
 import { ArrowUpDown, Eye, FileText, Plus, Trash } from "lucide-react"
@@ -15,26 +24,41 @@ type QuotationType = Quotation & {
 
 export function QuotationList({ quotations }: { quotations: QuotationType[] }) {
   const router = useRouter()
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deletePassword, setDeletePassword] = useState("")
+  const [quotationToDelete, setQuotationToDelete] = useState<string | null>(null)
+  const [selectedRows, setSelectedRows] = useState<string[]>([])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个报价单吗？')) {
-      return
-    }
+    setQuotationToDelete(id)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!quotationToDelete) return
 
     try {
-      const response = await fetch(`/api/quotations/${id}`, {
+      const response = await fetch(`/api/quotations/${quotationToDelete}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: deletePassword })
       })
 
       if (!response.ok) {
-        throw new Error('删除失败')
+        const error = await response.json()
+        throw new Error(error.message || '删除失败')
       }
 
       toast.success('报价单已删除')
-      router.refresh() // 刷新页面数据
+      router.refresh()
     } catch (error) {
-      toast.error('删除失败')
-      console.error('删除报价单失败:', error)
+      toast.error(error instanceof Error ? error.message : '删除失败')
+    } finally {
+      setIsDeleteDialogOpen(false)
+      setDeletePassword("")
+      setQuotationToDelete(null)
     }
   }
 
@@ -135,7 +159,60 @@ export function QuotationList({ quotations }: { quotations: QuotationType[] }) {
         columns={columns}
         data={quotations}
         searchKey="number"
+        onSelectedRowsChange={(rows) => {
+          setSelectedRows(rows.map(row => row.id))
+        }}
       />
+
+      <Dialog 
+        open={isDeleteDialogOpen} 
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open)
+          if (!open) {
+            setDeletePassword("")
+            setQuotationToDelete(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>删除确认</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="mb-4">请输入删除密码以确认删除操作</p>
+            <Input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              placeholder="请输入密码"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  confirmDelete()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false)
+                setDeletePassword("")
+                setQuotationToDelete(null)
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!deletePassword}
+            >
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

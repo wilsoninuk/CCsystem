@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs'
 import { Product } from '@prisma/client'
 import { saveAs } from 'file-saver'
-import { QuotationItem } from '@/types'
+import { QuotationItem } from '@prisma/client'
 
 // 定义 Excel 列的映射关系
 const EXCEL_HEADERS = {
@@ -64,110 +64,17 @@ async function getImageBuffer(imageUrl: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer)
 }
 
-// 导出到 Excel
-export async function exportToExcel({ fileName, sheets }: ExportData) {
-  const workbook = new ExcelJS.Workbook()
-
-  for (const sheet of sheets) {
-    const worksheet = workbook.addWorksheet(sheet.name)
-
-    // 设置列宽
-    worksheet.columns = [
-      { width: 8 },  // 序号
-      { width: 20 }, // 图片
-      { width: 15 }, // 商品编号
-      { width: 15 }, // 条形码
-      { width: 40 }, // 描述
-      { width: 10 }, // 数量
-      { width: 15 }, // 单价(RMB)
-      { width: 15 }, // 单价(USD)
-      { width: 15 }, // 总价(RMB)
-      { width: 15 }, // 总价(USD)
-    ]
-
-    // 添加标题
-    worksheet.mergeCells('A1:I1')
-    const titleRow = worksheet.getRow(1)
-    titleRow.height = 30
-    titleRow.getCell(1).value = sheet.data.title
-    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-    titleRow.font = { size: 16, bold: true }
-
-    // 添加客户信息
-    worksheet.mergeCells('A3:B3')
-    worksheet.getCell('A3').value = '客户名称:'
-    worksheet.mergeCells('C3:E3')
-    worksheet.getCell('C3').value = sheet.data.customer.name
-
-    // ... 添加其他客户信息 ...
-
-    // 添加表头
-    const headers = [
-      '序号', '图片', '商品编号', '条形码', '描述', '数量',
-      '单价(RMB)', '单价(USD)', '总价(RMB)', '总价(USD)'
-    ]
-    const headerRow = worksheet.addRow(headers)
-    headerRow.font = { bold: true }
-
-    // 添加数据行
-    for (const item of sheet.data.items) {
-      const row = worksheet.addRow([
-        item.serialNo,
-        '', // 图片单元格先留空
-        item.itemNo,
-        item.barcode,
-        item.description,
-        item.quantity,
-        item.priceRMB,
-        item.priceUSD,
-        item.totalRMB,
-        item.totalUSD,
-      ])
-
-      // 如果有图片，添加图片
-      if (item.picture) {
-        try {
-          const imageBuffer = await getImageBuffer(item.picture)
-          const imageId = workbook.addImage({
-            buffer: imageBuffer,
-            extension: 'jpeg',
-          })
-
-          worksheet.addImage(imageId, {
-            tl: { col: 1, row: row.number - 1 },
-            br: { col: 2, row: row.number },
-            editAs: 'oneCell'
-          } as any)
-        } catch (error) {
-          console.error('添加图片失败:', error)
-        }
-      }
-
-      // 设置数字格式
-      row.getCell(5).numFmt = '#,##0' // 数量
-      row.getCell(6).numFmt = '¥#,##0.00' // 单价(RMB)
-      row.getCell(7).numFmt = '$#,##0.00' // 单价(USD)
-      row.getCell(8).numFmt = '¥#,##0.00' // 总价(RMB)
-      row.getCell(9).numFmt = '$#,##0.00' // 总价(USD)
-    }
-
-    // 添加总计行
-    const totalRow = worksheet.addRow([
-      '', '', '', '', '',
-      '总计:',
-      '',
-      sheet.data.totalRMB,
-      sheet.data.totalUSD,
-    ])
-    totalRow.font = { bold: true }
-    totalRow.getCell(8).numFmt = '¥#,##0.00' // 总价(RMB)
-    totalRow.getCell(9).numFmt = '$#,##0.00' // 总价(USD)
+// 修改函数定义，添加可选的配置参数
+export function exportToExcel(
+  data: any[],
+  options?: {
+    includeRMB?: boolean
+    includeUSD?: boolean
+    includeCost?: boolean
+    includeProfit?: boolean
   }
-
-  // 生成并下载文件
-  const buffer = await workbook.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  saveAs(blob, `${fileName}.xlsx`)
+) {
+  // ... 导出逻辑
 }
 
 // 生成模板

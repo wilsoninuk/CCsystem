@@ -4,12 +4,13 @@ import { ProductsClient } from "./products-client"
 export const dynamic = 'force-dynamic'
 
 export default async function ProductsPage() {
-  // 从数据库获取所有商品数据
   const products = await prisma.product.findMany({
     orderBy: {
-      createdAt: 'desc'
+      itemNo: 'asc'
     }
   })
+
+  console.log('Products data:', products)  // 添加日志检查数据
 
   return <ProductsClient products={products} />
 } 

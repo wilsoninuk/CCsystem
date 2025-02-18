@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   ColumnDef,
   flexRender,
@@ -26,29 +26,45 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   searchKey: string
+  onSelectedRowsChange?: (rows: TData[]) => void
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   searchKey,
+  onSelectedRowsChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
+  const [rowSelection, setRowSelection] = useState({})
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    onGlobalFilterChange: setGlobalFilter,
     state: {
       sorting,
       globalFilter,
+      rowSelection,
     },
+    onSortingChange: setSorting,
+    onRowSelectionChange: (updater) => {
+      setRowSelection(updater)
+      if (onSelectedRowsChange) {
+        const newSelection = typeof updater === 'function' 
+          ? updater(rowSelection)
+          : updater
+        const selectedRows = Object.keys(newSelection)
+          .filter(key => newSelection[key])
+          .map(key => data[parseInt(key)])
+        onSelectedRowsChange(selectedRows)
+      }
+    },
+    enableRowSelection: true,
   })
 
   return (

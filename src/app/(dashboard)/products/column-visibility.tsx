@@ -18,8 +18,11 @@ export const ColumnVisibilityContext = createContext<{
 // Provider 组件
 export function ColumnVisibilityProvider({ children }: { children: ReactNode }) {
   const [selectedColumns, setSelectedColumns] = useState<string[]>([
+    "picture",
+    "itemNo",
     "barcode",
-    "material",
+    "description",
+    "cost",
     "supplier"
   ])
 
@@ -51,14 +54,14 @@ export function ColumnVisibility() {
                 className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
               >
                 <Checkbox
-                  checked={selectedColumns.includes(column.key)}
-                  onCheckedChange={(checked: boolean | 'indeterminate') => {
-                    if (typeof checked === 'boolean') {
-                      setSelectedColumns(
-                        checked
-                          ? [...selectedColumns, column.key]
-                          : selectedColumns.filter((key) => key !== column.key)
-                      )
+                  checked={column.required || selectedColumns.includes(column.key)}
+                  disabled={column.required}
+                  onCheckedChange={(checked) => {
+                    if (column.required) return
+                    if (checked) {
+                      setSelectedColumns([...selectedColumns, column.key])
+                    } else {
+                      setSelectedColumns(selectedColumns.filter(key => key !== column.key))
                     }
                   }}
                 />
