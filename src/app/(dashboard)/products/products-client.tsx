@@ -17,6 +17,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { ImportPreviewDialog } from "./import-preview-dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Command, CommandInput } from "@/components/ui/command"
 
 interface ProductsClientProps {
   products: Product[]
@@ -25,6 +33,7 @@ interface ProductsClientProps {
 export function ProductsClient({ products: initialProducts }: ProductsClientProps) {
   const [products, setProducts] = useState(initialProducts)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('all')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [previewData, setPreviewData] = useState<{
@@ -37,6 +46,15 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
     errors: { row: number; error: string }[]
   } | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  // 获取所有供应商（去重并过滤掉 null）
+  const suppliers = Array.from(new Set(products.map(p => p.supplier).filter((s): s is string => s !== null)))
+
+  // 过滤商品
+  const filteredProducts = selectedSupplier === 'all' 
+    ? products 
+    : products.filter(p => p.supplier === selectedSupplier)
 
   const handleProductUpdate = (updatedProduct: Product) => {
     setProducts(prev => 
@@ -56,11 +74,21 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
           toast.error('未找到选中的商品')
           return
         }
-        exportToExcel(selectedProducts)
+        exportToExcel(selectedProducts, {
+          includeRMB: true,
+          includeUSD: true,
+          includeCost: true,
+          includeProfit: false
+        })
         toast.success(`成功导出 ${selectedProducts.length} 个商品`)
       } else {
         if (confirm('是否导出全部商品？')) {
-          exportToExcel(products)
+          exportToExcel(products, {
+            includeRMB: true,
+            includeUSD: true,
+            includeCost: true,
+            includeProfit: false
+          })
           toast.success(`成功导出 ${products.length} 个商品`)
         }
       }
@@ -184,7 +212,28 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
               管理所有商品信息，包括基本信息、图片、价格等
             </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-4">
+            {/* 添加供应商筛选 */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-muted-foreground">供应商:</span>
+              <Select
+                value={selectedSupplier}
+                onValueChange={setSelectedSupplier}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="选择供应商" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  {suppliers.map(supplier => (
+                    <SelectItem key={supplier} value={supplier}>
+                      {supplier}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* 工具栏按钮 */}
             <Link href="/products/new">
               <Button>
@@ -257,7 +306,7 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         </div>
 
         <ProductsTable 
-          products={products}
+          products={filteredProducts}
           selectedRows={selectedRows}
           onSelectedRowsChange={setSelectedRows}
           onProductUpdate={handleProductUpdate}
@@ -274,6 +323,28 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
           }}
         />
       </ColumnVisibilityProvider>
+
+      <Command shouldFilter={false}>
+        <CommandInput
+          placeholder="输入商品编号或描述搜索..."
+          value={searchTerm}
+          onValueChange={setSearchTerm}
+        />
+        <div className="max-h-[300px] overflow-y-auto">
+          {products.map((product) => (
+            <div
+              key={product.id}
+              role="option"
+              onClick={() => {
+                // 直接处理点击事件
+              }}
+              className="flex items-start gap-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+            >
+              {/* ... 内容 */}
+            </div>
+          ))}
+        </div>
+      </Command>
     </div>
   )
 } 

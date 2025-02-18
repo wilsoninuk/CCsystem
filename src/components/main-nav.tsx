@@ -37,6 +37,16 @@ export function MainNav({
       href: "/settings",
       icon: <Settings className="w-4 h-4" />,
     },
+    {
+      title: "客户",
+      href: "/customers",
+      icon: <Home className="w-4 h-4" />,
+    },
+    {
+      title: "报价",
+      href: "/quotations",
+      icon: <BarChart3 className="w-4 h-4" />,
+    },
   ]
 
   return (

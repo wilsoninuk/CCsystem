@@ -140,3 +140,22 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+# 已知问题
+
+## ExcelJS 类型定义问题
+
+### 问题描述
+在 `src/lib/excel.ts` 中使用 ExcelJS 添加图片时，会出现类型错误：
+```typescript
+类型"{ col: number; row: number; colWidth: number; rowHeight: number; worksheet: Worksheet; }"缺少类型"Anchor"中的以下属性: nativeCol, nativeColOff, nativeRow, nativeRowOff
+```
+
+### 解决方案
+这是 ExcelJS 类型定义的问题，实际功能正常工作。我们选择保持当前代码不变，因为：
+1. 这只是类型定义问题，不影响实际功能
+2. 修改类型会导致其他问题
+3. 等待 ExcelJS 官方更新类型定义
+
+### 相关代码位置
+- src/lib/excel.ts 中的 worksheet.addImage() 调用

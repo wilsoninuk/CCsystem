@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useState } from "react"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -14,6 +15,7 @@ import {
   useReactTable,
   Table as TableType,
   Row,
+  RowSelectionState,
 } from "@tanstack/react-table"
 
 import {
@@ -38,26 +40,55 @@ import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
 
 interface DataTableProps<TData> {
-  table: TableType<TData>
-  searchKey?: string
-  renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement
+  columns: ColumnDef<TData, any>[]
+  data: TData[]
+  searchKey: string
+  onSelectedRowsChange?: (rows: TData[]) => void
 }
 
 export function DataTable<TData>({
-  table,
+  columns,
+  data,
   searchKey,
-  renderSubComponent,
+  onSelectedRowsChange,
 }: DataTableProps<TData>) {
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [globalFilter, setGlobalFilter] = useState("")
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    state: {
+      sorting,
+      globalFilter,
+      rowSelection,
+    },
+    onSortingChange: setSorting,
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection: true,
+  })
+
+  // 当选择改变时通知父组件
+  React.useEffect(() => {
+    if (onSelectedRowsChange) {
+      const selectedRows = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+      onSelectedRowsChange(selectedRows)
+    }
+  }, [rowSelection, onSelectedRowsChange, table])
+
   return (
     <div>
       {searchKey && (
         <div className="flex items-center py-4">
           <Input
             placeholder="搜索..."
-            value={table.getColumn(searchKey)?.getFilterValue() as string ?? ""}
-            onChange={(event) =>
-              table.getColumn(searchKey)?.setFilterValue(event.target.value)
-            }
+            value={globalFilter}
+            onChange={(event) => setGlobalFilter(event.target.value)}
             className="max-w-sm"
           />
         </div>
@@ -112,30 +143,24 @@ export function DataTable<TData>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <React.Fragment key={row.id}>
-                  <TableRow data-state={row.getIsSelected() && "selected"}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                  {row.getIsExpanded() && renderSubComponent && (
-                    <TableRow>
-                      <TableCell colSpan={row.getVisibleCells().length}>
-                        {renderSubComponent({ row })}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </React.Fragment>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
               ))
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={table.getAllColumns().length}
+                  colSpan={columns.length}
                   className="h-24 text-center"
                 >
                   暂无数据

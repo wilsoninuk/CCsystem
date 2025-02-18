@@ -36,6 +36,18 @@ const TableBody = React.forwardRef<
 ))
 TableBody.displayName = "TableBody"
 
+const TableFooter = React.forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(({ className, ...props }, ref) => (
+  <tfoot
+    ref={ref}
+    className={cn("bg-primary font-medium text-primary-foreground", className)}
+    {...props}
+  />
+))
+TableFooter.displayName = "TableFooter"
+
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
@@ -85,6 +97,7 @@ export {
   Table,
   TableHeader,
   TableBody,
+  TableFooter,
   TableRow,
   TableHead,
   TableCell,

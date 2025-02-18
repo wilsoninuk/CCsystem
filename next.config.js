@@ -20,7 +20,7 @@ const nextConfig = {
         pathname: '/imgs/**'
       }
     ],
-    domains: [], // 如果有远程域名需要在这里添加
+    domains: ['your-image-domain.com'], // 替换为你的图片域名
     unoptimized: true,
   },
   webpack: (config) => {

@@ -1,4 +1,3 @@
-// 这个文件定义了数据库的结构
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,133 +7,146 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 用户模型 - 简化的企业用户系统
 model User {
-  id        String   @id @default(cuid())
-  name      String   // 用户名
-  email     String   @unique  // 企业邮箱
-  password  String   // 密码
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  quotations Quotation[] // 用户创建的报价单
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String
+  password   String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  quotations Quotation[]
 }
 
-// 商品基础信息
 model Product {
-  id            String   @id @default(cuid())
-  itemNo        String   @unique
-  barcode       String   @unique
-  description   String
-  picture       String?
-  color         String?  // 改为 color
-  material      String?
-  productSize   String?
-  cartonSize    String?
-  cartonWeight  Float?
-  moq           Int?
-  cost          Float
-  supplier      String?
-  link1688      String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
+  id             String                 @id @default(cuid())
+  barcode        String                 @unique
+  itemNo         String                 @unique
+  description    String
+  cost           Float
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  cartonSize     String?
+  cartonWeight   Float?
+  color          String?
+  isActive       Boolean                @default(true)
+  link1688       String?
+  material       String?
+  moq            Int?
+  picture        String?
+  productSize    String?
+  supplier       String?
   customerPrices CustomerProductPrice[]
+  productQuotes  ProductQuote[]
   quotationItems QuotationItem[]
 }
 
-// 客户信息
 model Customer {
-  id            String   @id @default(cuid())
-  code          String   @unique // 客户编号
-  name          String   // 客户名称
-  piAddress     String   // PI信息地址
-  piShipper     String   // PI发货人信息
-  paymentMethod String   // 付款方式
-  shippingMethod String  // 船运方式
-  currency      String   @default("USD") // 默认货币
-  exchangeRate  Float?   // 汇率
-  remark        String?  // 备注
-  isActive      Boolean  @default(true) // 客户是否有效
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // 关联
-  productPrices CustomerProductPrice[] // 商品价格
-  quotations    Quotation[]           // 报价单
+  id             String                 @id @default(cuid())
+  name           String
+  piAddress      String
+  shippingMethod String
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  code           String                 @unique
+  currency       String                 @default("USD")
+  exchangeRate   Float?
+  isActive       Boolean                @default(true)
+  paymentMethod  String
+  piShipper      String
+  remark         String?
+  productPrices  CustomerProductPrice[]
+  productQuotes  ProductQuote[]
+  quotations     Quotation[]
 }
 
-// 客户商品价格
 model CustomerProductPrice {
   id         String   @id @default(cuid())
-  customerId String   // 客户ID
-  barcode    String   // 商品条码
-  price      Float    // 价格(RMB)
-  priceUSD   Float    // 价格(USD)
-  priceHistory Json?  // 历史价格记录
+  customerId String
+  price      Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  // 关联
+  currency   String   @default("USD")
+  productId  String
+  remark     String?
   customer   Customer @relation(fields: [customerId], references: [id])
-  product    Product  @relation(fields: [barcode], references: [barcode])
+  product    Product  @relation(fields: [productId], references: [id])
 
-  @@unique([customerId, barcode]) // 确保每个客户的每个商品只有一个价格记录
+  @@unique([customerId, productId])
+  @@index([customerId])
+  @@index([productId])
 }
 
-// 报价单
 model Quotation {
-  id         String   @id @default(cuid())
-  number     String   @unique // 报价单编号 (自动生成)
-  customerId String   // 客户ID
-  userId     String   // 创建用户ID
-  status     String   // 状态：draft(草稿), sent(已发送), modified(已修改), final(最终版)
-  exchangeRate Float  // 当前汇率
-  totalAmountRMB Float @default(0) // 总金额(RMB)
-  totalAmountUSD Float @default(0) // 总金额(USD)
-  remark      String? // 备注
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String              @id @default(cuid())
+  customerId     String
+  status         String
+  exchangeRate   Float
+  totalAmountRMB Float               @default(0)
+  totalAmountUSD Float               @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  number         String              @unique
+  remark         String?
+  userId         String
+  customerName   String
+  paymentMethod  String
+  piAddress      String
+  piShipper      String
+  shippingMethod String
+  customer       Customer            @relation(fields: [customerId], references: [id])
+  user           User                @relation(fields: [userId], references: [id])
+  items          QuotationItem[]
+  revisions      QuotationRevision[]
 
-  // 关联
-  customer   Customer @relation(fields: [customerId], references: [id])
-  user       User     @relation(fields: [userId], references: [id])
-  items      QuotationItem[] // 报价单项目
-  revisions  QuotationRevision[] // 报价单修订历史
+  @@index([number])
 }
 
-// 报价单修订历史
 model QuotationRevision {
-  id          String   @id @default(cuid())
-  quotationId String   // 报价单ID
-  version     Int      // 版本号
-  changes     Json     // 修改内容
-  createdAt   DateTime @default(now())
-  
-  // 关联
+  id          String    @id @default(cuid())
+  quotationId String
+  version     Int
+  changes     Json
+  createdAt   DateTime  @default(now())
   quotation   Quotation @relation(fields: [quotationId], references: [id])
 }
 
-// 报价单项目
 model QuotationItem {
-  id          String   @id @default(cuid())
-  quotationId String   // 报价单ID
-  barcode     String   // 商品条码
-  serialNo    Int      // 序号
-  quantity    Int      // 数量
-  exwPriceRMB Float    // 出厂价(RMB)
-  exwPriceUSD Float    // 出厂价(USD)
-  actualQty   Int?     // 实际下单数量
-  finalPriceRMB Float? // 最终价格(RMB)
-  finalPriceUSD Float? // 最终价格(USD)
-  shipping    Float?   // 运费
-  profit      Float?   // 利润
-  profitRate  Float?   // 利润率
-  remark      String?  // 备注
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  quotationId   String
+  barcode       String
+  serialNo      Int
+  quantity      Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  actualQty     Int?
+  exwPriceRMB   Float
+  exwPriceUSD   Float
+  finalPriceRMB Float?
+  finalPriceUSD Float?
+  profit        Float?
+  profitRate    Float?
+  remark        String?
+  shipping      Float?
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  quotation     Quotation @relation(fields: [quotationId], references: [id])
+  color         String?
+}
 
-  // 关联
-  quotation   Quotation @relation(fields: [quotationId], references: [id])
-  product     Product   @relation(fields: [barcode], references: [barcode])
-} 
+model ProductQuote {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  productId  String
+  customerId String
+  price      Float
+  currency   String    @default("USD")
+  status     String    @default("active")
+  validUntil DateTime?
+  remark     String?
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  product    Product   @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([customerId])
+}
