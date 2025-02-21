@@ -109,43 +109,44 @@ export async function POST(request: Request) {
 
     // 处理导入
     if (updateDuplicates) {
-      // 更新已存在的商品
-      const updatePromises = existingProducts.map(existing => {
-        const newData = products.find(p => p.barcode === existing.barcode)
-        if (!newData) return Promise.resolve() // 处理未找到的情况
+      // 使用事务处理更新和新增
+      await prisma.$transaction(async (tx) => {
+        // 更新已存在的商品
+        for (const existing of existingProducts) {
+          const newData = products.find(p => p.barcode === existing.barcode)
+          if (!newData) continue
 
-        // 明确指定更新数据的类型
-        return prisma.product.update({
-          where: { id: existing.id },
-          data: {
-            picture: newData.picture,
-            itemNo: newData.itemNo,
-            barcode: newData.barcode,
-            description: newData.description,
-            cost: newData.cost,
-            supplier: newData.supplier,
-            color: newData.color,
-            material: newData.material,
-            productSize: newData.productSize,
-            cartonSize: newData.cartonSize,
-            cartonWeight: newData.cartonWeight,
-            moq: newData.moq,
-            link1688: newData.link1688
-          }
-        })
-      }).filter(Boolean) // 过滤掉 undefined 的 Promise
+          await tx.product.update({
+            where: { id: existing.id },
+            data: {
+              picture: newData.picture,
+              itemNo: newData.itemNo,
+              barcode: newData.barcode,
+              description: newData.description,
+              cost: newData.cost,
+              supplier: newData.supplier,
+              color: newData.color,
+              material: newData.material,
+              productSize: newData.productSize,
+              cartonSize: newData.cartonSize,
+              cartonWeight: newData.cartonWeight,
+              moq: newData.moq,
+              link1688: newData.link1688
+            }
+          })
+        }
 
-      // 添加新商品（条形码不重复的）
-      const newProducts = products.filter(p => 
-        !existingProducts.some(e => e.barcode === p.barcode)
-      )
+        // 添加新商品
+        const newProducts = products.filter(p => 
+          !existingProducts.some(e => e.barcode === p.barcode)
+        )
 
-      const result = await prisma.$transaction([
-        ...updatePromises,
-        prisma.product.createMany({
-          data: newProducts
-        })
-      ])
+        if (newProducts.length > 0) {
+          await tx.product.createMany({
+            data: newProducts
+          })
+        }
+      })
 
       return NextResponse.json({ 
         success: true,

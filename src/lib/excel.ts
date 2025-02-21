@@ -20,6 +20,43 @@ const EXCEL_HEADERS = {
   link1688: '1688链接',
 }
 
+interface ExcelSheetData {
+  title: string
+  date: string
+  customer: {
+    name: string
+    piAddress: string
+    piShipper: string
+    paymentMethod: string
+    shippingMethod: string
+  }
+  exchangeRate: number
+  items: Array<{
+    serialNo: number
+    picture: string | null
+    itemNo: string
+    barcode: string
+    description: string
+    quantity: number
+    priceRMB: number
+    priceUSD: number
+    totalRMB: number
+    totalUSD: number
+  }>
+  totalRMB: number
+  totalUSD: number
+}
+
+interface ExcelSheet {
+  name: string
+  data: ExcelSheetData
+}
+
+interface ExcelOptions {
+  fileName: string
+  sheets: ExcelSheet[]
+}
+
 interface ExportData {
   fileName: string
   sheets: {
@@ -65,16 +102,8 @@ async function getImageBuffer(imageUrl: string): Promise<Buffer> {
 }
 
 // 修改函数定义，添加可选的配置参数
-export function exportToExcel(
-  data: any[],
-  options?: {
-    includeRMB?: boolean
-    includeUSD?: boolean
-    includeCost?: boolean
-    includeProfit?: boolean
-  }
-) {
-  // ... 导出逻辑
+export async function exportToExcel(options: ExcelOptions): Promise<void> {
+  // ... 实现导出逻辑 ...
 }
 
 // 生成模板
