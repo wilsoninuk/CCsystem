@@ -30,7 +30,11 @@
       - [x] 支持图片 URL 导入
       - [x] 数据验证和错误处理
       - [x] 支持新增和更新操作
+      - [x] 重复条形码检查和处理
     - [x] Excel 数据导出
+      - [x] 支持图片导出
+      - [x] 自定义列导出
+      - [x] 数据格式化
   - [x] 商品表格组件
     - [x] 自定义列显示
     - [x] 排序和搜索功能
@@ -50,21 +54,21 @@
 - [ ] 利润分析模块
 
 ## 今日工作总结（2024-02-16）
-1. 优化了商品导入功能
-   - 简化了图片处理逻辑，改为仅支持图片 URL
+1. 修复了商品导入功能
+   - 修复了导入对话框显示问题
    - 改进了数据验证和错误处理
-   - 添加了更详细的导入模板说明
-   - 修复了重复数据导入的问题
+   - 添加了重复条形码检查
+   - 优化了用户界面和交互体验
 
-2. 改进了错误处理
-   - 添加了更友好的错误提示
-   - 优化了验证错误的展示方式
-   - 完善了日志输出
+2. 完善了导出功能
+   - 修复了图片导出的对齐问题
+   - 优化了数据格式化
+   - 改进了错误处理
 
 3. 优化了代码结构
-   - 删除了不必要的图片压缩代码
-   - 简化了数据处理流程
+   - 重构了导入导出相关组件
    - 改进了类型定义
+   - 添加了更详细的错误日志
 
 ## 下一步计划
 1. 实现商品编辑功能
@@ -141,21 +145,72 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-# 已知问题
+# 已知问题与解决方案
 
-## ExcelJS 类型定义问题
+## ExcelJS 导出图片的最佳实践
 
-### 问题描述
-在 `src/lib/excel.ts` 中使用 ExcelJS 添加图片时，会出现类型错误：
+### 1. 对齐问题解决方案
+在使用 ExcelJS 导出带图片的 Excel 文件时，如果先添加数据再添加图片，会导致单元格对齐问题。
+
+### 2. 图片导出解决方案
+
+#### 问题描述
+在导出 Excel 时，需要将图片 URL 转换为实际图片嵌入到 Excel 文件中。
+
+#### 解决方案
+采用"先图片后数据"的处理顺序：
+1. 先处理并添加所有图片
+2. 再添加文字数据
+3. 最后设置样式
+
+#### 关键步骤
+1. 不要直接使用图片 URL
+2. 使用 fetch 获取图片二进制数据
+3. 将图片数据转换为 ArrayBuffer
+4. 使用 workbook.addImage 添加图片
+5. 使用 worksheet.addImage 将图片放置到指定单元格
+
+#### 注意事项
+1. 需要处理图片加载失败的情况
+2. 考虑图片格式的兼容性（jpeg, png 等）
+3. 处理跨域问题（可能需要代理服务器）
+4. 设置适当的图片尺寸和位置
+
+#### 完整示例
 ```typescript
-类型"{ col: number; row: number; colWidth: number; rowHeight: number; worksheet: Worksheet; }"缺少类型"Anchor"中的以下属性: nativeCol, nativeColOff, nativeRow, nativeRowOff
+if (product.picture) {
+  try {
+    // 获取图片数据
+    const imageResponse = await fetch(product.picture)
+    if (!imageResponse.ok) {
+      console.error('获取图片失败:', product.picture)
+      continue
+    }
+
+    // 转换为 ArrayBuffer
+    const imageArrayBuffer = await imageResponse.arrayBuffer()
+
+    // 添加到工作簿
+    const imageId = workbook.addImage({
+      buffer: imageArrayBuffer,
+      extension: 'jpeg',
+    })
+
+    // 设置图片位置和大小
+    worksheet.addImage(imageId, {
+      tl: { col: 0, row: rowNumber - 1 },
+      br: { col: 1, row: rowNumber },
+      editAs: 'oneCell'
+    } as any)
+
+    // 调整行高以适应图片
+    worksheet.getRow(rowNumber).height = 80
+  } catch (error) {
+    console.error('添加图片失败:', error, product.picture)
+  }
+}
 ```
 
-### 解决方案
-这是 ExcelJS 类型定义的问题，实际功能正常工作。我们选择保持当前代码不变，因为：
-1. 这只是类型定义问题，不影响实际功能
-2. 修改类型会导致其他问题
-3. 等待 ExcelJS 官方更新类型定义
-
-### 相关代码位置
-- src/lib/excel.ts 中的 worksheet.addImage() 调用
+#### 相关文件
+- src/app/api/products/export/route.ts
+- src/app/api/image/route.ts（用于处理跨域图片）

@@ -3,6 +3,7 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { Product } from "@prisma/client"
 import Image from "next/image"
+import { Checkbox } from "@/components/ui/checkbox"
 
 // 定义可选列配置
 export const OPTIONAL_COLUMNS = [
@@ -23,6 +24,25 @@ export const OPTIONAL_COLUMNS = [
 
 // 列定义
 export const columns: ColumnDef<Product>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
   {
     accessorKey: "picture",
     header: "商品图片",

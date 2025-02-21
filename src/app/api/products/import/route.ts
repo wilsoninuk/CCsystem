@@ -1,6 +1,23 @@
 import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
-import { Product, Prisma } from '@prisma/client'
+import { Product } from '@prisma/client'
+import ExcelJS from 'exceljs'
+
+interface ImportProduct {
+  picture: string | null
+  itemNo: string
+  barcode: string
+  description: string
+  cost: number
+  supplier: string | null
+  color: string | null
+  material: string | null
+  productSize: string | null
+  cartonSize: string | null
+  cartonWeight: number | null
+  moq: number | null
+  link1688: string | null
+}
 
 // 将函数声明移到块外部
 const generateBarcode = (itemNo: string): string => {
@@ -12,151 +29,144 @@ const generateBarcode = (itemNo: string): string => {
 
 export async function POST(request: Request) {
   try {
-    const { products, updateDuplicates } = await request.json()
+    const formData = await request.formData()
+    const file = formData.get('file')
     
-    if (!updateDuplicates) {
-      // 只导入新商品
-      const created = await prisma.product.createMany({
-        data: products
-      })
-      return NextResponse.json({
+    if (!file || !(file instanceof File)) {
+      throw new Error('未找到文件')
+    }
+
+    console.log('开始处理文件:', file.name)
+    const updateDuplicates = formData.get('updateDuplicates') === 'true'
+
+    // 解析Excel文件
+    const buffer = await file.arrayBuffer()
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(buffer)
+    
+    const worksheet = workbook.getWorksheet(1)
+    if (!worksheet) throw new Error('Excel文件格式错误')
+
+    // 解析数据
+    const products: ImportProduct[] = []
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return // 跳过表头
+
+      const product: ImportProduct = {
+        picture: row.getCell('picture').value?.toString() || null,
+        itemNo: row.getCell('itemNo').value?.toString() || '',
+        barcode: row.getCell('barcode').value?.toString() || '',
+        description: row.getCell('description').value?.toString() || '',
+        cost: Number(row.getCell('cost').value) || 0,
+        supplier: row.getCell('supplier').value?.toString() || null,
+        color: row.getCell('color').value?.toString() || null,
+        material: row.getCell('material').value?.toString() || null,
+        productSize: row.getCell('productSize').value?.toString() || null,
+        cartonSize: row.getCell('cartonSize').value?.toString() || null,
+        cartonWeight: row.getCell('cartonWeight').value ? Number(row.getCell('cartonWeight').value) : null,
+        moq: row.getCell('moq').value ? Number(row.getCell('moq').value) : null,
+        link1688: row.getCell('link1688').value?.toString() || null,
+      }
+
+      // 验证必填字段
+      if (!product.itemNo || !product.barcode || !product.description || !product.cost) {
+        throw new Error(`第 ${rowNumber} 行数据不完整，请检查必填字段`)
+      }
+
+      products.push(product)
+    })
+
+    // 检查条形码重复
+    const existingProducts = await prisma.product.findMany({
+      where: {
+        OR: products.map(p => ({
+          barcode: p.barcode
+        }))
+      }
+    })
+
+    if (existingProducts.length > 0 && !updateDuplicates) {
+      // 返回重复的商品信息
+      const duplicates = existingProducts.map(p => ({
+        barcode: p.barcode,
+        existingProduct: {
+          itemNo: p.itemNo,
+          description: p.description,
+          supplier: p.supplier
+        },
+        newProduct: products.find(np => np.barcode === p.barcode)
+      }))
+
+      return NextResponse.json(
+        { 
+          error: '存在重复条形码', 
+          duplicates,
+          duplicateCount: duplicates.length
+        },
+        { status: 409 }
+      )
+    }
+
+    // 处理导入
+    if (updateDuplicates) {
+      // 更新已存在的商品
+      const updatePromises = existingProducts.map(existing => {
+        const newData = products.find(p => p.barcode === existing.barcode)
+        if (!newData) return Promise.resolve() // 处理未找到的情况
+
+        // 明确指定更新数据的类型
+        return prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            picture: newData.picture,
+            itemNo: newData.itemNo,
+            barcode: newData.barcode,
+            description: newData.description,
+            cost: newData.cost,
+            supplier: newData.supplier,
+            color: newData.color,
+            material: newData.material,
+            productSize: newData.productSize,
+            cartonSize: newData.cartonSize,
+            cartonWeight: newData.cartonWeight,
+            moq: newData.moq,
+            link1688: newData.link1688
+          }
+        })
+      }).filter(Boolean) // 过滤掉 undefined 的 Promise
+
+      // 添加新商品（条形码不重复的）
+      const newProducts = products.filter(p => 
+        !existingProducts.some(e => e.barcode === p.barcode)
+      )
+
+      const result = await prisma.$transaction([
+        ...updatePromises,
+        prisma.product.createMany({
+          data: newProducts
+        })
+      ])
+
+      return NextResponse.json({ 
         success: true,
-        created: created.count,
-        updated: 0
+        updated: existingProducts.length,
+        created: newProducts.length
       })
     } else {
-      // 更新重复商品并导入新商品
-      console.log('收到导入请求，原始数据:', products)
-      
-      if (!Array.isArray(products)) {
-        console.error('数据格式错误: 不是数组')
-        return NextResponse.json(
-          { success: false, error: '无效的数据格式' },
-          { status: 400 }
-        )
-      }
-
-      // 验证数据
-      const validationErrors = products.map((product, index) => {
-        if (!product.itemNo || !product.description || product.cost === undefined) {
-          return {
-            row: index + 1,
-            error: '商品编号、商品描述、成本为必填项'
-          }
-        }
-        return null
-      }).filter(Boolean)
-
-      if (validationErrors.length > 0) {
-        return NextResponse.json({
-          success: false,
-          error: '数据验证失败',
-          details: validationErrors
-        }, { status: 400 })
-      }
-
-      // 检查已存在的商品编号
-      const itemNos = products.map(p => p.itemNo)
-      const existingProducts = await prisma.product.findMany({
-        where: {
-          itemNo: {
-            in: itemNos
-          }
-        },
-        select: { itemNo: true, barcode: true }
+      // 只添加新商品
+      const result = await prisma.product.createMany({
+        data: products
       })
 
-      const existingItemNos = new Set(existingProducts.map(p => p.itemNo))
-      const newProducts: Prisma.ProductCreateInput[] = []
-      const updateProducts: Prisma.ProductUpdateInput[] = []
-
-      // 分离新增和更新的商品
-      products.forEach(product => {
-        const formattedProduct = {
-          itemNo: product.itemNo,
-          description: product.description,
-          cost: Number(product.cost),
-          picture: product.picture || null,
-          barcode: product.barcode || generateBarcode(product.itemNo),
-          color: product.color || null,
-          material: product.material || null,
-          productSize: product.productSize || null,
-          cartonSize: product.cartonSize || null,
-          cartonWeight: product.cartonWeight ? Number(product.cartonWeight) : null,
-          moq: product.moq ? Number(product.moq) : null,
-          supplier: product.supplier || null,
-          link1688: product.link1688 || null,
-        }
-
-        if (existingItemNos.has(product.itemNo)) {
-          // 更新时不更新条形码
-          const { barcode, ...updateData } = formattedProduct
-          updateProducts.push(updateData)
-        } else {
-          newProducts.push(formattedProduct)
-        }
+      return NextResponse.json({
+        success: true,
+        created: result.count
       })
-
-      console.log(`新增商品: ${newProducts.length} 条`)
-      console.log(`更新商品: ${updateProducts.length} 条`)
-
-      try {
-        // 使用事务处理数据库操作
-        const result = await prisma.$transaction(async (tx) => {
-          // 更新已存在的商品
-          const updateResults = await Promise.all(
-            updateProducts.map(product => 
-              tx.product.update({
-                where: { itemNo: product.itemNo as string },
-                data: {
-                  ...product,
-                  updatedAt: new Date()
-                }
-              })
-            )
-          )
-
-          // 创建新商品
-          const createResult = newProducts.length > 0 
-            ? await tx.product.createMany({
-                data: newProducts.map(p => ({
-                  ...p,
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                }))
-              })
-            : { count: 0 }
-
-          return {
-            updated: updateResults.length,
-            created: createResult.count
-          }
-        })
-
-        return NextResponse.json({ 
-          success: true,
-          ...result
-        })
-      } catch (error) {
-        console.error('数据库操作失败:', error)
-        if (error instanceof Prisma.PrismaClientKnownRequestError) {
-          if (error.code === 'P2002') {
-            return NextResponse.json({
-              success: false,
-              error: '存在重复的商品编号或条形码'
-            }, { status: 409 })
-          }
-        }
-        throw error
-      }
     }
   } catch (error) {
-    console.error('导入错误:', error)
+    console.error('导入失败，详细错误:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : '导入失败'
-      },
+      { error: error instanceof Error ? error.message : '导入失败' },
       { status: 500 }
     )
   }
