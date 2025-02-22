@@ -4,6 +4,9 @@ import { ColumnDef } from "@tanstack/react-table"
 import { Product } from "@prisma/client"
 import Image from "next/image"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Button } from "@/components/ui/button"
+import { ImageUpload } from "./components/image-upload"
+import { useRouter } from "next/navigation"
 
 // 定义可选列配置
 export const OPTIONAL_COLUMNS = [
@@ -48,16 +51,28 @@ export const columns: ColumnDef<Product>[] = [
     header: "商品图片",
     cell: ({ row }) => {
       const picture = row.getValue<string | null>("picture")
-      return picture ? (
-        <div className="relative w-16 h-16">
-          <Image
-            src={picture}
-            alt={row.getValue("description")}
-            fill
-            className="object-contain rounded-sm"
+      return (
+        <div className="flex items-center space-x-2">
+          {picture ? (
+            <div className="relative w-16 h-16">
+              <Image
+                src={picture}
+                alt={row.getValue("description")}
+                fill
+                className="object-contain rounded-sm"
+                unoptimized
+              />
+            </div>
+          ) : null}
+          <ImageUpload 
+            productId={row.original.id}
+            currentImage={picture}
+            onUploadSuccess={(newImageUrl) => {
+              window.location.reload()
+            }}
           />
         </div>
-      ) : null
+      )
     }
   },
   {

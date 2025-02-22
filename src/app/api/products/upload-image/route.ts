@@ -1,84 +1,65 @@
-import { prisma } from "@/lib/db"
-import { NextResponse } from "next/server"
-import sharp from "sharp"
-import path from "path"
-import fs from "fs/promises"
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { writeFile, mkdir, unlink } from 'fs/promises'
+import { join } from 'path'
+import sharp from 'sharp'
 
 // 配置
-const UPLOAD_DIR = path.join(process.cwd(), 'public/uploads')
+const UPLOAD_DIR = join(process.cwd(), 'public', 'uploads')
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
-const ALLOWED_FILE_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp'
-]
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    const file = formData.get('file') as File
-    const itemNo = formData.get('itemNo') as string
+    const image = formData.get('image') as File
+    const productId = formData.get('productId') as string
 
-    console.log('Upload request:', { itemNo, fileType: file.type, fileSize: file.size })
+    console.log('Upload request:', { productId, imageType: image?.type })
 
-    // 参数验证
-    if (!file || !itemNo) {
+    if (!image || !productId) {
       return NextResponse.json(
-        { success: false, error: '缺少必要参数' },
+        { error: '缺少必要参数' },
         { status: 400 }
       )
     }
 
-    // 文件类型检查
-    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { success: false, error: '不支持的文件类型，请上传 JPG、PNG、GIF 或 WebP 格式的图片' },
-        { status: 400 }
-      )
-    }
-
-    // 文件大小检查
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { success: false, error: '文件大小不能超过 5MB' },
-        { status: 400 }
-      )
-    }
-
-    // 商品编号验证
+    // 验证产品是否存在
     const product = await prisma.product.findUnique({
-      where: { itemNo }
+      where: { id: productId },
+      select: { id: true, picture: true }
     })
+
     if (!product) {
       return NextResponse.json(
-        { success: false, error: '商品不存在' },
+        { error: '产品不存在' },
         { status: 404 }
       )
     }
 
-    // 确保上传目录存在
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads')
-    await fs.mkdir(uploadDir, { recursive: true })
-
-    // 读取文件内容
-    const buffer = Buffer.from(await file.arrayBuffer())
-
-    // 验证文件是否为有效的图片
-    try {
-      const metadata = await sharp(buffer).metadata()
-      if (!metadata.width || !metadata.height) {
-        throw new Error('Invalid image')
-      }
-    } catch {
+    // 验证文件类型
+    if (!ALLOWED_FILE_TYPES.includes(image.type)) {
       return NextResponse.json(
-        { success: false, error: '无效的图片文件' },
+        { error: '不支持的文件类型' },
         { status: 400 }
       )
     }
 
-    // 使用 sharp 处理图片
-    const processedImage = await sharp(buffer)
+    // 验证文件大小
+    if (image.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: '文件大小不能超过 5MB' },
+        { status: 400 }
+      )
+    }
+
+    // 生成文件名
+    const fileName = `${productId}-${Date.now()}.jpg`
+    const filePath = join(UPLOAD_DIR, fileName)
+
+    // 处理图片
+    const bytes = await image.arrayBuffer()
+    const processedImage = await sharp(Buffer.from(bytes))
       .resize(800, 800, {
         fit: 'inside',
         withoutEnlargement: true
@@ -89,48 +70,31 @@ export async function POST(request: Request) {
       })
       .toBuffer()
 
-    // 如果存在旧图片，删除它
-    if (product.picture && product.picture.startsWith('/uploads/')) {
-      const oldFilePath = path.join(process.cwd(), 'public', product.picture)
-      try {
-        await fs.unlink(oldFilePath)
-      } catch (error) {
-        console.error('删除旧图片失败:', error)
-      }
-    }
+    // 保存图片
+    await mkdir(UPLOAD_DIR, { recursive: true })
+    await writeFile(filePath, processedImage)
 
-    // 生成安全的文件名
-    const fileName = `${itemNo}-${Date.now()}-${Math.random().toString(36).substring(2)}.jpg`
-    const filePath = path.join(uploadDir, fileName)
-
-    // 生成访问 URL
-    const imageUrl = `/uploads/${fileName}` // 先定义 imageUrl
-
-    // 保存文件
-    await fs.writeFile(filePath, processedImage)
-    console.log('File saved:', { filePath, imageUrl })
+    // 从请求中获取实际的 host 和 protocol
+    const host = request.headers.get('host') || 'localhost:3001'
+    const protocol = request.headers.get('x-forwarded-proto') || 'http'
+    const imageUrl = `${protocol}://${host}/uploads/${fileName}`
 
     // 更新数据库
     const updatedProduct = await prisma.product.update({
-      where: { itemNo },
-      data: { picture: imageUrl }
+      where: { id: productId },
+      data: { picture: imageUrl },
+      select: { id: true, picture: true }
     })
-    console.log('Database updated:', updatedProduct)
 
-    // 返回更新后的图片 URL
-    return NextResponse.json({
-      success: true,
-      url: updatedProduct.picture
+    return NextResponse.json({ 
+      imageUrl: updatedProduct.picture,
+      message: '上传成功' 
     })
+
   } catch (error) {
-    console.error('Upload failed:', error)
-    // 返回更详细的错误信息
+    console.error('上传失败:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : '上传失败',
-        details: error instanceof Error ? error.stack : undefined
-      },
+      { error: error instanceof Error ? error.message : '上传失败' },
       { status: 500 }
     )
   }

@@ -30,50 +30,67 @@ const generateBarcode = (itemNo: string): string => {
 export async function POST(request: Request) {
   try {
     const formData = await request.formData()
-    const file = formData.get('file')
-    
-    if (!file || !(file instanceof File)) {
-      throw new Error('未找到文件')
-    }
-
-    console.log('开始处理文件:', file.name)
+    const file = formData.get('file') as File
     const updateDuplicates = formData.get('updateDuplicates') === 'true'
 
-    // 解析Excel文件
-    const buffer = await file.arrayBuffer()
+    const arrayBuffer = await file.arrayBuffer()
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(buffer)
-    
+    await workbook.xlsx.load(arrayBuffer)
+
     const worksheet = workbook.getWorksheet(1)
-    if (!worksheet) throw new Error('Excel文件格式错误')
-
-    // 解析数据
     const products: ImportProduct[] = []
+    const errors: ImportError[] = []
+
+    // 定义列映射
+    const columnMap = {
+      picture: 'A',
+      itemNo: 'B',
+      barcode: 'C',
+      description: 'D',
+      cost: 'E',
+      supplier: 'F',
+      color: 'G',
+      material: 'H',
+      productSize: 'I',
+      cartonSize: 'J',
+      cartonWeight: 'K',
+      moq: 'L',
+      link1688: 'M'
+    }
+
+    // 从第二行开始读取数据（跳过标题行）
     worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return // 跳过表头
+      if (rowNumber === 1) return // 跳过标题行
 
-      const product: ImportProduct = {
-        picture: row.getCell('picture').value?.toString() || null,
-        itemNo: row.getCell('itemNo').value?.toString() || '',
-        barcode: row.getCell('barcode').value?.toString() || '',
-        description: row.getCell('description').value?.toString() || '',
-        cost: Number(row.getCell('cost').value) || 0,
-        supplier: row.getCell('supplier').value?.toString() || null,
-        color: row.getCell('color').value?.toString() || null,
-        material: row.getCell('material').value?.toString() || null,
-        productSize: row.getCell('productSize').value?.toString() || null,
-        cartonSize: row.getCell('cartonSize').value?.toString() || null,
-        cartonWeight: row.getCell('cartonWeight').value ? Number(row.getCell('cartonWeight').value) : null,
-        moq: row.getCell('moq').value ? Number(row.getCell('moq').value) : null,
-        link1688: row.getCell('link1688').value?.toString() || null,
+      try {
+        const product: ImportProduct = {
+          picture: row.getCell(columnMap.picture).value?.toString() || null,
+          itemNo: row.getCell(columnMap.itemNo).value?.toString() || '',
+          barcode: row.getCell(columnMap.barcode).value?.toString() || '',
+          description: row.getCell(columnMap.description).value?.toString() || '',
+          cost: Number(row.getCell(columnMap.cost).value) || 0,
+          supplier: row.getCell(columnMap.supplier).value?.toString() || null,
+          color: row.getCell(columnMap.color).value?.toString() || null,
+          material: row.getCell(columnMap.material).value?.toString() || null,
+          productSize: row.getCell(columnMap.productSize).value?.toString() || null,
+          cartonSize: row.getCell(columnMap.cartonSize).value?.toString() || null,
+          cartonWeight: Number(row.getCell(columnMap.cartonWeight).value) || null,
+          moq: Number(row.getCell(columnMap.moq).value) || null,
+          link1688: row.getCell(columnMap.link1688).value?.toString() || null
+        }
+
+        // 验证必填字段
+        if (!product.itemNo || !product.description || !product.cost) {
+          throw new Error('商品编号、商品描述、成本为必填项')
+        }
+
+        products.push(product)
+      } catch (error) {
+        errors.push({
+          row: rowNumber,
+          error: error instanceof Error ? error.message : '数据格式错误'
+        })
       }
-
-      // 验证必填字段
-      if (!product.itemNo || !product.barcode || !product.description || !product.cost) {
-        throw new Error(`第 ${rowNumber} 行数据不完整，请检查必填字段`)
-      }
-
-      products.push(product)
     })
 
     // 检查条形码重复
@@ -109,6 +126,9 @@ export async function POST(request: Request) {
 
     // 处理导入
     if (updateDuplicates) {
+      let updatedCount = 0
+      let createdCount = 0
+
       // 使用事务处理更新和新增
       await prisma.$transaction(async (tx) => {
         // 更新已存在的商品
@@ -134,6 +154,7 @@ export async function POST(request: Request) {
               link1688: newData.link1688
             }
           })
+          updatedCount++
         }
 
         // 添加新商品
@@ -142,16 +163,17 @@ export async function POST(request: Request) {
         )
 
         if (newProducts.length > 0) {
-          await tx.product.createMany({
+          const result = await tx.product.createMany({
             data: newProducts
           })
+          createdCount = result.count
         }
       })
 
       return NextResponse.json({ 
         success: true,
-        updated: existingProducts.length,
-        created: newProducts.length
+        updated: updatedCount,
+        created: createdCount
       })
     } else {
       // 只添加新商品
