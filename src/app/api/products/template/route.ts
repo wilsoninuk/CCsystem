@@ -11,6 +11,7 @@ export async function GET() {
       { header: '商品图片', key: 'picture', width: 20 },
       { header: '商品编号*', key: 'itemNo', width: 15 },
       { header: '条形码*', key: 'barcode', width: 15 },
+      { header: '类别', key: 'category', width: 15 },
       { header: '商品描述*', key: 'description', width: 30 },
       { header: '成本*', key: 'cost', width: 10 },
       { header: '供应商', key: 'supplier', width: 15 },
@@ -28,6 +29,7 @@ export async function GET() {
       picture: 'https://example.com/image.jpg',
       itemNo: 'ITEM001',
       barcode: '6901234567890',
+      category: '电子产品',
       description: '示例商品',
       cost: 99.99,
       supplier: '示例供应商',
@@ -54,6 +56,7 @@ export async function GET() {
     noteSheet.addRow(['商品图片', '商品图片URL地址', '否', 'http(s)开头的图片链接'])
     noteSheet.addRow(['商品编号', '商品唯一编号', '是', '字母数字组合'])
     noteSheet.addRow(['条形码', '商品条形码', '是', '13位数字'])
+    noteSheet.addRow(['类别', '商品类别', '否', '文本'])
     noteSheet.addRow(['商品描述', '商品详细描述', '是', '文本'])
     noteSheet.addRow(['成本', '商品成本价格', '是', '数字，最多2位小数'])
     noteSheet.addRow(['供应商', '供应商名称', '否', '文本'])

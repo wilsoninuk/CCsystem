@@ -1,26 +1,34 @@
-import { prisma } from "../src/lib/db"
+import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+
+const prisma = new PrismaClient()
 
 async function main() {
-  // 创建默认系统用户
-  const defaultUser = await prisma.user.upsert({
-    where: { email: 'system@example.com' },
-    update: {},
-    create: {
-      email: 'system@example.com',
-      name: 'System',
-      password: 'system',
+  // 重置管理员密码为 admin123
+  const hashedPassword = await bcrypt.hash('admin123', 10)
+  
+  const updatedUser = await prisma.user.update({
+    where: { 
+      email: 'wilsoninuk@gmail.com' 
     },
+    data: {
+      password: hashedPassword
+    }
   })
 
-  console.log({ defaultUser })
+  console.log('管理员密码已重置为: admin123')
+  console.log('更新的用户信息:', {
+    id: updatedUser.id,
+    email: updatedUser.email,
+    name: updatedUser.name
+  })
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect()
-  })
-  .catch(async (e) => {
-    console.error(e)
-    await prisma.$disconnect()
+  .catch((e) => {
+    console.error('重置密码失败:', e)
     process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
   }) 

@@ -2,9 +2,8 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Upload, Loader2 } from "lucide-react"
+import { Upload } from "lucide-react"
 import { toast } from "sonner"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface ImageUploadProps {
   productId: string
@@ -33,6 +32,7 @@ export function ImageUpload({ productId, currentImage, onUploadSuccess }: ImageU
 
     try {
       setIsUploading(true)
+      console.log('开始上传文件:', file.name) // 添加日志
 
       const formData = new FormData()
       formData.append('image', file)
@@ -42,6 +42,8 @@ export function ImageUpload({ productId, currentImage, onUploadSuccess }: ImageU
         method: 'POST',
         body: formData,
       })
+
+      console.log('上传响应:', response.status) // 添加日志
 
       if (!response.ok) {
         const error = await response.json()
@@ -58,45 +60,34 @@ export function ImageUpload({ productId, currentImage, onUploadSuccess }: ImageU
       toast.error(error instanceof Error ? error.message : '上传失败')
     } finally {
       setIsUploading(false)
+      event.target.value = '' // 重置文件输入
     }
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="inline-block">
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              id={`image-upload-${productId}`}
-              onChange={handleUpload}
-              disabled={isUploading}
-            />
-            <label 
-              htmlFor={`image-upload-${productId}`}
-              className="cursor-pointer inline-block"
-            >
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                disabled={isUploading}
-              >
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-              </Button>
-            </label>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{currentImage ? '更换图片' : '上传图片'}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div className="relative" onClick={() => console.log('点击上传区域')}>
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        disabled={isUploading}
+        onClick={() => console.log('点击按钮')}
+      >
+        <Upload className="h-4 w-4" />
+      </Button>
+      <input
+        type="file"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        accept="image/*"
+        onChange={(e) => {
+          console.log('选择文件:', e.target.files?.[0]?.name)
+          handleUpload(e)
+        }}
+        disabled={isUploading}
+        onClick={(e) => {
+          e.stopPropagation()
+          console.log('点击文件输入')
+        }}
+      />
+    </div>
   )
 } 

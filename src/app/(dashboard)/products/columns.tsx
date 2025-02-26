@@ -1,19 +1,33 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
+import { format } from "date-fns"
 import { Product } from "@prisma/client"
 import Image from "next/image"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { ImageUpload } from "./components/image-upload"
 import { useRouter } from "next/navigation"
+import { Download, Edit } from "lucide-react"
+import { toast } from "sonner"
+import { EditProductForm } from "./components/edit-product-form"
+import { useState } from "react"
+
+// 定义可选列配置类型
+interface OptionalColumn {
+  key: string
+  label: string
+  required: boolean
+  defaultHidden?: boolean
+}
 
 // 定义可选列配置
-export const OPTIONAL_COLUMNS = [
+export const OPTIONAL_COLUMNS: OptionalColumn[] = [
   { key: "picture", label: "商品图片", required: true },
   { key: "itemNo", label: "商品编号", required: true },
-  { key: "barcode", label: "条形码", required: false },
+  { key: "barcode", label: "条形码", required: true },
   { key: "description", label: "商品描述", required: true },
+  { key: "category", label: "类别", required: false },
   { key: "cost", label: "成本", required: true },
   { key: "supplier", label: "供应商", required: false },
   { key: "color", label: "颜色/款式", required: false },
@@ -23,7 +37,23 @@ export const OPTIONAL_COLUMNS = [
   { key: "cartonWeight", label: "装箱重量", required: false },
   { key: "moq", label: "MOQ", required: false },
   { key: "link1688", label: "1688链接", required: false },
-] as const
+  { key: "creator", label: "创建者", required: false, defaultHidden: true },
+  { key: "createdAt", label: "创建时间", required: false, defaultHidden: true },
+  { key: "updater", label: "最后修改者", required: false },
+  { key: "updatedAt", label: "最后修改时间", required: false }
+]
+
+// 扩展 Product 类型以包含关联字段
+type ProductWithRelations = Product & {
+  creator?: {
+    name: string | null
+    email: string | null
+  } | null
+  updater?: {
+    name: string | null
+    email: string | null
+  } | null
+}
 
 // 列定义
 export const columns: ColumnDef<Product>[] = [
@@ -84,6 +114,11 @@ export const columns: ColumnDef<Product>[] = [
     header: "条形码",
   },
   {
+    accessorKey: "category",
+    header: "类别",
+    cell: ({ row }) => row.original.category || '-'
+  },
+  {
     accessorKey: "description",
     header: "商品描述",
   },
@@ -114,7 +149,7 @@ export const columns: ColumnDef<Product>[] = [
   },
   {
     accessorKey: "cartonWeight",
-    header: "装箱重量(kg)",
+    header: "箱重(kg)",
     cell: ({ row }) => {
       const weight = row.getValue<number | null>("cartonWeight")
       return weight ? `${weight.toFixed(2)}kg` : '-'
@@ -143,6 +178,53 @@ export const columns: ColumnDef<Product>[] = [
           查看
         </a>
       ) : null
+    }
+  },
+  {
+    accessorKey: "createdBy",
+    header: "创建者",
+    cell: ({ row }) => row.original.creator?.name || '-'
+  },
+  {
+    accessorKey: "createdAt",
+    header: "创建时间",
+    cell: ({ row }) => format(new Date(row.original.createdAt), 'yyyy-MM-dd HH:mm')
+  },
+  {
+    accessorKey: "updatedBy",
+    header: "最后修改者",
+    cell: ({ row }) => row.original.updater?.name || '-'
+  },
+  {
+    accessorKey: "updatedAt",
+    header: "修改时间",
+    cell: ({ row }) => format(new Date(row.original.updatedAt), 'yyyy-MM-dd HH:mm')
+  },
+  {
+    id: "actions",
+    cell: ({ row }) => {
+      const product = row.original
+      const [editOpen, setEditOpen] = useState(false)
+
+      return (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setEditOpen(true)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <EditProductForm
+            product={product}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            onSuccess={() => {
+              window.location.reload()
+            }}
+          />
+        </div>
+      )
     }
   }
 ] 

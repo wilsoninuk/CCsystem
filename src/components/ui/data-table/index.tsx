@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from 'react'
 import {
   useReactTable,
@@ -7,6 +9,8 @@ import {
   getPaginationRowModel,
   flexRender,
   RowSelectionState,
+  Table as TanstackTable,
+  Row as TanstackRow,
 } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { ColumnDef, ColumnFiltersState, SortingState } from '@tanstack/react-table'
@@ -20,7 +24,7 @@ import {
 } from "@/components/ui/table"
 
 interface DataTableProps<TData> {
-  columns: ColumnDef<TData>[]
+  columns: ColumnDef<TData, any>[]
   data: TData[]
   searchKey: string
   onSelectedRowsChange?: (rows: TData[]) => void

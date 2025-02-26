@@ -12,8 +12,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { User, LogOut, Settings } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
 
 export function UserNav() {
+  const { data: session } = useSession()
+  const isAdmin = session?.user?.email === "wilsoninuk@gmail.com"
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -28,9 +32,11 @@ export function UserNav() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">管理员</p>
+            <p className="text-sm font-medium leading-none">
+              {isAdmin ? "管理员" : "用户"}
+            </p>
             <p className="text-xs leading-none text-muted-foreground">
-              admin@example.com
+              {session?.user?.email}
             </p>
           </div>
         </DropdownMenuLabel>
@@ -42,7 +48,7 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => signOut()}>
           <LogOut className="mr-2 h-4 w-4" />
           <span>退出登录</span>
         </DropdownMenuItem>

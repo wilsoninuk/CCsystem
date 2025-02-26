@@ -15,12 +15,14 @@ model User {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   quotations Quotation[]
+  createdProducts Product[] @relation("ProductCreator")
+  updatedProducts Product[] @relation("ProductUpdater")
 }
 
 model Product {
   id             String                 @id @default(cuid())
-  barcode        String                 @unique
-  itemNo         String                 @unique
+  barcode        String                 @unique(map: "Product_barcode_unique")
+  itemNo         String
   description    String
   cost           Float
   createdAt      DateTime               @default(now())
@@ -33,11 +35,20 @@ model Product {
   material       String?
   moq            Int?
   picture        String?
+  additionalPictures String[]
   productSize    String?
   supplier       String?
+  category       String?
+  createdBy      String?
+  updatedBy      String?
   customerPrices CustomerProductPrice[]
   productQuotes  ProductQuote[]
   quotationItems QuotationItem[]
+  creator        User?     @relation("ProductCreator", fields: [createdBy], references: [id])
+  updater        User?     @relation("ProductUpdater", fields: [updatedBy], references: [id])
+
+  @@index([createdBy])
+  @@index([updatedBy])
 }
 
 model Customer {

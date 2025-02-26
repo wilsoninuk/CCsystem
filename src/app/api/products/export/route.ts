@@ -19,10 +19,11 @@ export async function POST(request: Request) {
     // 设置列宽和表头
     worksheet.columns = [
       { header: '商品图片', key: 'picture', width: 15 },
-      { header: '商品编号', key: 'itemNo', width: 15, style: { alignment: { vertical: 'middle', horizontal: 'left' } } },
-      { header: '条形码', key: 'barcode', width: 15, style: { alignment: { vertical: 'middle', horizontal: 'left' } } },
-      { header: '商品描述', key: 'description', width: 30, style: { alignment: { vertical: 'middle', horizontal: 'left' } } },
-      { header: '成本', key: 'cost', width: 10, style: { alignment: { vertical: 'middle', horizontal: 'right' } } },
+      { header: '商品编号', key: 'itemNo', width: 15 },
+      { header: '条形码', key: 'barcode', width: 15 },
+      { header: '类别', key: 'category', width: 15 },
+      { header: '商品描述', key: 'description', width: 30 },
+      { header: '成本', key: 'cost', width: 10 },
       { header: '供应商', key: 'supplier', width: 15, style: { alignment: { vertical: 'middle', horizontal: 'left' } } },
       { header: '颜色/款式', key: 'color', width: 15, style: { alignment: { vertical: 'middle', horizontal: 'left' } } },
       { header: '材料', key: 'material', width: 15, style: { alignment: { vertical: 'middle', horizontal: 'left' } } },
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
       // 设置每个单元格的值和样式
       row.getCell('itemNo').value = product.itemNo
       row.getCell('barcode').value = product.barcode
+      row.getCell('category').value = product.category || '未分类'
       row.getCell('description').value = product.description
       row.getCell('cost').value = product.cost
       row.getCell('supplier').value = product.supplier

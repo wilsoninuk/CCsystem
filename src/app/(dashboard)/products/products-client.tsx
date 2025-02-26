@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useContext, useRef } from "react"
+import { useState, useContext, useRef, useEffect } from "react"
 import { DataTable } from "@/components/ui/data-table"
 import { columns } from "./columns"
 import { Product } from "@prisma/client"
@@ -11,6 +11,8 @@ import { ColumnVisibility, ColumnVisibilityProvider, ColumnVisibilityContext } f
 import { toast } from "sonner"
 import { ImportDialog } from "@/app/(dashboard)/products/components/import-dialog"
 import { useRouter } from "next/navigation"
+import { CreateProductDialog } from "./components/create-product-dialog"
+import { ColumnSelectDialog } from "./components/column-select-dialog"
 
 console.log('ImportDialog imported:', ImportDialog)
 
@@ -32,21 +34,59 @@ interface DuplicateProduct {
 }
 
 export function ProductsClient({ products: initialProducts }: ProductsClientProps) {
+  const router = useRouter()
   const [products, setProducts] = useState(initialProducts)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [categories, setCategories] = useState<string[]>([])
   const [visibleColumns, setVisibleColumns] = useState(columns)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [columnSelectOpen, setColumnSelectOpen] = useState(false)
 
   // 获取所有供应商（去重并过滤掉 null）
   const suppliers = Array.from(new Set(products.map(p => p.supplier).filter((s): s is string => s !== null)))
 
+  // 获取所有类别
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/categories');
+        const data = await response.json();
+        // 过滤掉空值和"无类别"
+        const validCategories = data.filter((category: string | null) => 
+          category && category !== "无类别"
+        );
+        setCategories(validCategories);
+      } catch (error) {
+        console.error('获取类别失败:', error);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+  // 初始化时设置默认可见列
+  useEffect(() => {
+    const defaultVisibleColumns = columns.filter(column => {
+      const key = (column as any).accessorKey || (column as any).id
+      return key && !['createdBy', 'createdAt'].includes(key)
+    })
+    setVisibleColumns(defaultVisibleColumns)
+  }, [])
+
   // 过滤商品
-  const filteredProducts = selectedSupplier === 'all' 
-    ? products 
-    : products.filter(p => p.supplier === selectedSupplier)
+  const filteredProducts = products
+    .filter(product => {
+      const matchesSupplier = selectedSupplier === 'all' || 
+                          (selectedSupplier === '无供应商' ? product.supplier === null : product.supplier === selectedSupplier);
+      const matchesCategory = selectedCategory === 'all' || 
+                          (selectedCategory === '无类别' ? product.category === null : product.category === selectedCategory);
+      return matchesSupplier && matchesCategory;
+    })
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()); // 按修改时间降序排序
 
   console.log('Initial products:', initialProducts)
   console.log('Products state:', products)
@@ -57,26 +97,6 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
     data: filteredProducts,
     searchKey: "itemNo"
   })
-
-  const toggleColumns = () => {
-    if (visibleColumns.length === columns.length) {
-      // 切换到精简视图 - 显示最常用的列
-      const basicColumns = columns.filter(col => {
-        const key = (col as any).accessorKey
-        return [
-          'picture',
-          'itemNo',
-          'description',
-          'cost',
-          'supplier'
-        ].includes(key)
-      })
-      setVisibleColumns(basicColumns)
-    } else {
-      // 切换到完整视图
-      setVisibleColumns(columns)
-    }
-  }
 
   // 修改批量删除处理函数
   const handleBatchDelete = async () => {
@@ -206,6 +226,19 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
     }
   }
 
+  // 刷新商品列表
+  const refreshProducts = async () => {
+    try {
+      const response = await fetch('/api/products')
+      if (!response.ok) throw new Error('获取商品列表失败')
+      const data = await response.json()
+      setProducts(data)
+    } catch (error) {
+      console.error('刷新商品列表失败:', error)
+      toast.error('刷新商品列表失败')
+    }
+  }
+
   console.log('importDialogOpen state:', importDialogOpen)
 
   console.log('Rendering ProductsClient, importDialogOpen:', importDialogOpen)
@@ -229,6 +262,7 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="无供应商">无供应商</SelectItem>
                 {suppliers.map(supplier => (
                   <SelectItem key={supplier} value={supplier}>{supplier}</SelectItem>
                 ))}
@@ -236,8 +270,25 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
             </Select>
           </div>
 
+          {/* 类别筛选 */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-muted-foreground">类别:</span>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="选择类别" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="无类别">无类别</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* 工具按钮 */}
-          <Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />新增
           </Button>
           <Button variant="outline" onClick={handleExport}>
@@ -249,9 +300,9 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
               <Upload className="mr-2 h-4 w-4" />导入
             </Button>
           </div>
-          <Button variant="outline" onClick={toggleColumns}>
+          <Button variant="outline" onClick={() => setColumnSelectOpen(true)}>
             <Settings className="mr-2 h-4 w-4" />
-            {visibleColumns.length === columns.length ? '精简视图' : '完整视图'}
+            自定义列
           </Button>
 
           {selectedRows.length > 0 && (
@@ -280,6 +331,23 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onImport={handleImport}
+      />
+
+      <CreateProductDialog 
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSuccess={() => {
+          refreshProducts()
+          router.refresh()
+        }}
+      />
+
+      <ColumnSelectDialog 
+        open={columnSelectOpen}
+        onOpenChange={setColumnSelectOpen}
+        columns={columns}
+        visibleColumns={visibleColumns}
+        onColumnsChange={setVisibleColumns}
       />
 
       <DataTable 
