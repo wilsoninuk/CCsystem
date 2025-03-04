@@ -4,45 +4,31 @@ import ExcelJS from 'exceljs'
 export async function GET() {
   try {
     const workbook = new ExcelJS.Workbook()
-    const worksheet = workbook.addWorksheet('商品导入模板')
+    const worksheet = workbook.addWorksheet('产品导入模板')
 
     // 设置列
     worksheet.columns = [
-      { header: '商品图片', key: 'picture', width: 20 },
       { header: '商品编号*', key: 'itemNo', width: 15 },
-      { header: '条形码*', key: 'barcode', width: 15 },
-      { header: '类别', key: 'category', width: 15 },
-      { header: '商品描述*', key: 'description', width: 30 },
+      { header: '条形码*', key: 'barcode', width: 20 },
+      { header: '商品描述*', key: 'description', width: 40 },
       { header: '成本*', key: 'cost', width: 10 },
-      { header: '供应商', key: 'supplier', width: 15 },
-      { header: '颜色/款式', key: 'color', width: 15 },
-      { header: '材料', key: 'material', width: 15 },
+      { header: '类别', key: 'category', width: 15 },
+      { header: '供应商', key: 'supplier', width: 20 },
+      { header: '颜色', key: 'color', width: 15 },
+      { header: '材质', key: 'material', width: 15 },
       { header: '产品尺寸', key: 'productSize', width: 15 },
-      { header: '装箱尺寸', key: 'cartonSize', width: 15 },
-      { header: '装箱重量', key: 'cartonWeight', width: 10 },
-      { header: 'MOQ', key: 'moq', width: 10 },
+      { header: '箱规', key: 'cartonSize', width: 15 },
+      { header: '箱重', key: 'cartonWeight', width: 10 },
+      { header: '最小订量', key: 'moq', width: 10 },
       { header: '1688链接', key: 'link1688', width: 30 },
+      { header: '主图URL', key: 'mainImage', width: 30 },
+      { header: '附图URL1', key: 'image1', width: 30 },
+      { header: '附图URL2', key: 'image2', width: 30 },
+      { header: '附图URL3', key: 'image3', width: 30 },
+      { header: '附图URL4', key: 'image4', width: 30 }
     ]
 
-    // 添加示例数据
-    worksheet.addRow({
-      picture: 'https://example.com/image.jpg',
-      itemNo: 'ITEM001',
-      barcode: '6901234567890',
-      category: '电子产品',
-      description: '示例商品',
-      cost: 99.99,
-      supplier: '示例供应商',
-      color: '红色',
-      material: '棉',
-      productSize: '10x20x30cm',
-      cartonSize: '30x40x50cm',
-      cartonWeight: 1.5,
-      moq: 100,
-      link1688: 'https://detail.1688.com/xxx'
-    })
-
-    // 设置样式
+    // 设置标题行样式
     worksheet.getRow(1).font = { bold: true }
     worksheet.getRow(1).fill = {
       type: 'pattern',
@@ -50,37 +36,45 @@ export async function GET() {
       fgColor: { argb: 'FFE0E0E0' }
     }
 
-    // 添加说明
-    const noteSheet = workbook.addWorksheet('填写说明')
-    noteSheet.addRow(['字段', '说明', '是否必填', '格式要求'])
-    noteSheet.addRow(['商品图片', '商品图片URL地址', '否', 'http(s)开头的图片链接'])
-    noteSheet.addRow(['商品编号', '商品唯一编号', '是', '字母数字组合'])
-    noteSheet.addRow(['条形码', '商品条形码', '是', '13位数字'])
-    noteSheet.addRow(['类别', '商品类别', '否', '文本'])
-    noteSheet.addRow(['商品描述', '商品详细描述', '是', '文本'])
-    noteSheet.addRow(['成本', '商品成本价格', '是', '数字，最多2位小数'])
-    noteSheet.addRow(['供应商', '供应商名称', '否', '文本'])
-    noteSheet.addRow(['颜色/款式', '商品颜色或款式', '否', '文本'])
-    noteSheet.addRow(['材料', '商品材质', '否', '文本'])
-    noteSheet.addRow(['产品尺寸', '单个产品尺寸', '否', '长x宽x高，单位cm'])
-    noteSheet.addRow(['装箱尺寸', '外箱尺寸', '否', '长x宽x高，单位cm'])
-    noteSheet.addRow(['装箱重量', '外箱重量', '否', '数字，单位kg'])
-    noteSheet.addRow(['MOQ', '最小起订量', '否', '整数'])
-    noteSheet.addRow(['1688链接', '1688商品链接', '否', 'http(s)开头的URL'])
+    // 添加示例数据
+    worksheet.addRow({
+      itemNo: 'ABC123',
+      barcode: '6901234567890',
+      description: '示例商品描述',
+      cost: 100,
+      category: '示例类别',
+      supplier: '示例供应商',
+      color: '红色',
+      material: '塑料',
+      productSize: '10x20x30cm',
+      cartonSize: '100x200x300cm',
+      cartonWeight: 5.5,
+      moq: 1000,
+      link1688: 'https://detail.1688.com/xxx',
+      mainImage: 'https://example.com/main.jpg',
+      image1: 'https://example.com/1.jpg',
+      image2: 'https://example.com/2.jpg',
+      image3: 'https://example.com/3.jpg',
+      image4: 'https://example.com/4.jpg'
+    })
 
-    // 设置说明表样式
-    noteSheet.getColumn(1).width = 15
-    noteSheet.getColumn(2).width = 30
-    noteSheet.getColumn(3).width = 15
-    noteSheet.getColumn(4).width = 30
-    noteSheet.getRow(1).font = { bold: true }
+    // 添加说明行
+    worksheet.addRow([])
+    worksheet.addRow(['注意事项：'])
+    worksheet.addRow(['1. 标记*的字段为必填项'])
+    worksheet.addRow(['2. 条形码必须填写且不能重复，建议使用标准13位数字条形码'])
+    worksheet.addRow(['3. 图片URL需要是可以直接访问的完整链接'])
+    worksheet.addRow(['4. 每个产品最多支持1张主图和4张附图'])
+    worksheet.addRow(['5. 数字字段（成本、箱重、最小订量）请填写数字，不要包含单位'])
 
+    // 生成 Excel 文件
     const buffer = await workbook.xlsx.writeBuffer()
 
+    // 返回文件
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename=products_template.xlsx'
+        'Content-Disposition': 'attachment; filename=product_import_template.xlsx'
       }
     })
   } catch (error) {

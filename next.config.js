@@ -2,11 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    // 移除 optimizeFonts 配置
     strictNextHead: false,
-    images: {
-      allowFutureImage: true,
-    },
   },
   images: {
     remotePatterns: [

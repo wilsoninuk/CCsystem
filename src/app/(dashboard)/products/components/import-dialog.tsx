@@ -37,14 +37,39 @@ export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      toast.error('请选择要导入的文件')
+      return
+    }
 
     try {
       setIsLoading(true)
+      console.log('开始导入文件:', file.name)
       await onImport(file)
+      console.log('导入成功')
+      toast.success('导入成功')
       onOpenChange(false)
     } catch (error) {
       console.error('导入错误:', error)
+      // 显示错误信息
+      if (error instanceof Error) {
+        const errorMessage = error.message
+        if (errorMessage.includes('\n')) {
+          // 如果错误信息包含换行符，说明是详细的错误信息
+          toast.error(
+            <div className="whitespace-pre-wrap">
+              {errorMessage}
+            </div>,
+            {
+              duration: 10000 // 显示10秒
+            }
+          )
+        } else {
+          toast.error(errorMessage)
+        }
+      } else {
+        toast.error('导入失败')
+      }
     } finally {
       setIsLoading(false)
       e.target.value = '' // 重置文件输入

@@ -3,7 +3,7 @@
 import { useState, useContext, useRef, useEffect } from "react"
 import { DataTable } from "@/components/ui/data-table"
 import { columns } from "./columns"
-import { Product } from "@prisma/client"
+import { Product, User, ProductImage } from "@prisma/client"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Plus, Download, Upload, Settings, Loader2, Trash2 } from "lucide-react"
@@ -16,8 +16,15 @@ import { ColumnSelectDialog } from "./components/column-select-dialog"
 
 console.log('ImportDialog imported:', ImportDialog)
 
+// 添加带关联的Product类型
+type ProductWithRelations = Product & {
+  images: ProductImage[]
+  creator: User | null
+  updater: User | null
+}
+
 interface ProductsClientProps {
-  products: Product[]
+  products: ProductWithRelations[]
 }
 
 interface DuplicateProduct {
@@ -35,7 +42,7 @@ interface DuplicateProduct {
 
 export function ProductsClient({ products: initialProducts }: ProductsClientProps) {
   const router = useRouter()
-  const [products, setProducts] = useState(initialProducts)
+  const [products, setProducts] = useState<ProductWithRelations[]>(initialProducts)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -150,16 +157,11 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
   const handleExport = async () => {
     try {
       const response = await fetch('/api/products/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ids: selectedRows.length > 0 ? selectedRows : undefined 
-        })
+        method: 'GET'
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '导出失败')
+        throw new Error('导出失败')
       }
 
       const blob = await response.blob()
@@ -171,17 +173,33 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-
+      
       toast.success('导出成功')
     } catch (error) {
-      console.error('导出错误:', error)
-      toast.error(error instanceof Error ? error.message : '导出失败')
+      console.error('导出失败:', error)
+      toast.error('导出失败')
     }
   }
 
   // 处理导入
   const handleImport = async (file: File) => {
     try {
+      // 检查文件大小（10MB限制）
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('文件大小不能超过10MB')
+      }
+
+      // 检查文件类型
+      if (!file.name.match(/\.(xlsx|xls)$/i)) {
+        throw new Error('只支持.xlsx或.xls格式的Excel文件')
+      }
+
+      console.log('开始导入文件:', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      })
+
       const formData = new FormData()
       formData.append('file', file)
 
@@ -190,46 +208,70 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         body: formData
       })
 
+      const result = await response.json()
+      console.log('导入响应:', result)
+
       if (!response.ok) {
-        const error = await response.json()
         if (response.status === 409) {
           // 显示重复商品的详细信息
-          const duplicateInfo = error.duplicates.map((d: DuplicateProduct) => 
+          const duplicateInfo = result.duplicates.map((d: DuplicateProduct) => 
             `条形码: ${d.barcode}\n` +
             `现有商品: ${d.existingProduct.itemNo} - ${d.existingProduct.description}\n` +
             `新商品: ${d.newProduct.itemNo} - ${d.newProduct.description}\n`
           ).join('\n')
 
           if (confirm(
-            `发现${error.duplicateCount}个重复的条形码:\n\n${duplicateInfo}\n\n是否更新这些商品？`
+            `发现${result.duplicateCount}个重复的条形码:\n\n${duplicateInfo}\n\n是否更新这些商品？`
           )) {
+            console.log('用户确认更新重复商品')
             // 重新提交，允许更新
             formData.append('updateDuplicates', 'true')
             const updateResponse = await fetch('/api/products/import', {
               method: 'POST',
               body: formData
             })
-            if (!updateResponse.ok) throw new Error('导入失败')
-            const result = await updateResponse.json()
-            toast.success(`成功更新${result.updated}个商品，新增${result.created}个商品`)
+
+            const updateResult = await updateResponse.json()
+            console.log('更新响应:', updateResult)
+
+            if (!updateResponse.ok) {
+              console.error('更新失败:', updateResult)
+              throw new Error(updateResult.error || '更新失败')
+            }
+
+            toast.success(`成功更新${updateResult.updated}个商品，新增${updateResult.created}个商品`)
+            await refreshProducts()
+            return
           }
           return
         }
-        throw new Error(error.error || '导入失败')
+
+        console.error('导入失败:', result)
+        
+        // 显示详细的错误信息
+        if (result.details && Array.isArray(result.details)) {
+          const errorDetails = result.details
+            .map((error: any) => `第 ${error.row} 行: ${error.error}`)
+            .join('\n')
+          throw new Error(`导入失败:\n${errorDetails}`)
+        }
+        
+        throw new Error(result.error || '导入失败')
       }
 
-      const result = await response.json()
       toast.success(`成功导入${result.created}个商品`)
-      window.location.reload()
+      await refreshProducts()
     } catch (error) {
+      console.error('导入错误:', error)
       toast.error(error instanceof Error ? error.message : '导入失败')
+      throw error // 重新抛出错误，让ImportDialog组件知道导入失败
     }
   }
 
   // 刷新商品列表
   const refreshProducts = async () => {
     try {
-      const response = await fetch('/api/products')
+      const response = await fetch('/api/products?include=images,creator,updater')
       if (!response.ok) throw new Error('获取商品列表失败')
       const data = await response.json()
       setProducts(data)

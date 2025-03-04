@@ -2,7 +2,7 @@
 
 import { ColumnDef } from "@tanstack/react-table"
 import { format } from "date-fns"
-import { Product } from "@prisma/client"
+import { Product, User, ProductImage } from "@prisma/client"
 import Image from "next/image"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,10 @@ import { Download, Edit } from "lucide-react"
 import { toast } from "sonner"
 import { EditProductForm } from "./components/edit-product-form"
 import { useState } from "react"
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header"
+import { Badge } from "@/components/ui/badge"
+import { zhCN } from "date-fns/locale"
+import { ProductDetailDialog } from "./components/product-detail-dialog"
 
 // 定义可选列配置类型
 interface OptionalColumn {
@@ -45,18 +49,13 @@ export const OPTIONAL_COLUMNS: OptionalColumn[] = [
 
 // 扩展 Product 类型以包含关联字段
 type ProductWithRelations = Product & {
-  creator?: {
-    name: string | null
-    email: string | null
-  } | null
-  updater?: {
-    name: string | null
-    email: string | null
-  } | null
+  images: ProductImage[]
+  creator: User | null
+  updater: User | null
 }
 
 // 列定义
-export const columns: ColumnDef<Product>[] = [
+export const columns: ColumnDef<ProductWithRelations>[] = [
   {
     id: "select",
     header: ({ table }) => (
@@ -77,31 +76,41 @@ export const columns: ColumnDef<Product>[] = [
     enableHiding: false,
   },
   {
-    accessorKey: "picture",
-    header: "商品图片",
+    id: "mainImage",
+    header: "主图",
     cell: ({ row }) => {
-      const picture = row.getValue<string | null>("picture")
+      const [detailOpen, setDetailOpen] = useState(false)
+      const mainImage = row.original.images?.find(img => img.isMain)
+      
       return (
-        <div className="flex items-center space-x-2">
-          {picture ? (
-            <div className="relative w-16 h-16">
-              <Image
-                src={picture}
-                alt={row.getValue("description")}
-                fill
-                className="object-contain rounded-sm"
-                unoptimized
+        <>
+          <div 
+            className="relative w-16 h-16 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setDetailOpen(true)}
+          >
+            {mainImage ? (
+              <img
+                src={mainImage.url}
+                alt={row.original.description}
+                className="object-cover w-full h-full rounded"
               />
-            </div>
-          ) : null}
-          <ImageUpload 
-            productId={row.original.id}
-            currentImage={picture}
-            onUploadSuccess={(newImageUrl) => {
+            ) : (
+              <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                无图片
+              </div>
+            )}
+          </div>
+
+          <ProductDetailDialog
+            product={row.original}
+            open={detailOpen}
+            onOpenChange={setDetailOpen}
+            onSuccess={() => {
+              setDetailOpen(false)
               window.location.reload()
             }}
           />
-        </div>
+        </>
       )
     }
   },
@@ -183,7 +192,21 @@ export const columns: ColumnDef<Product>[] = [
   {
     accessorKey: "createdBy",
     header: "创建者",
-    cell: ({ row }) => row.original.creator?.name || '-'
+    cell: ({ row }) => {
+      const creator = row.original.creator
+      return creator ? (
+        <div className="flex items-center gap-2">
+          {creator.image && (
+            <img 
+              src={creator.image} 
+              alt={creator.name || ''} 
+              className="w-6 h-6 rounded-full"
+            />
+          )}
+          <span>{creator.name}</span>
+        </div>
+      ) : '-'
+    }
   },
   {
     accessorKey: "createdAt",
@@ -193,12 +216,28 @@ export const columns: ColumnDef<Product>[] = [
   {
     accessorKey: "updatedBy",
     header: "最后修改者",
-    cell: ({ row }) => row.original.updater?.name || '-'
+    cell: ({ row }) => {
+      const updater = row.original.updater
+      return updater ? (
+        <div className="flex items-center gap-2">
+          {updater.image && (
+            <img 
+              src={updater.image} 
+              alt={updater.name || ''} 
+              className="w-6 h-6 rounded-full"
+            />
+          )}
+          <span>{updater.name}</span>
+        </div>
+      ) : '-'
+    }
   },
   {
     accessorKey: "updatedAt",
-    header: "修改时间",
-    cell: ({ row }) => format(new Date(row.original.updatedAt), 'yyyy-MM-dd HH:mm')
+    header: "最后修改时间",
+    cell: ({ row }) => {
+      return format(new Date(row.original.updatedAt), 'yyyy-MM-dd HH:mm:ss', { locale: zhCN })
+    }
   },
   {
     id: "actions",

@@ -23,21 +23,12 @@ export default async function ProductsPage() {
     // 正常查询
     const products = await prisma.product.findMany({
       include: {
-        creator: {
-          select: {
-            name: true,
-            email: true
-          }
-        },
-        updater: {
-          select: {
-            name: true,
-            email: true
-          }
-        }
+        images: true,
+        creator: true,
+        updater: true
       },
       orderBy: {
-        itemNo: 'asc'
+        updatedAt: 'desc'
       }
     })
 

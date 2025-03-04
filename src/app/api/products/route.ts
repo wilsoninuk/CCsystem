@@ -5,13 +5,42 @@ import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const include = searchParams.get('include')?.split(',') || []
+
     const products = await prisma.product.findMany({
+      include: {
+        images: true,
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
+          }
+        },
+        updater: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
+          }
+        }
+      },
       orderBy: {
         updatedAt: 'desc'
       }
     })
 
-    return NextResponse.json(products)
+    // 确保返回的数据中包含完整的用户信息
+    const productsWithUserInfo = products.map(product => ({
+      ...product,
+      creator: product.creator || null,
+      updater: product.updater || null
+    }))
+
+    return NextResponse.json(productsWithUserInfo)
   } catch (error) {
     console.error('获取商品列表失败:', error)
     return NextResponse.json(
@@ -79,8 +108,6 @@ export async function POST(request: Request) {
         material: data.material || null,
         productSize: data.productSize || null,
         moq: data.moq ? parseInt(data.moq) : null,
-        picture: data.picture || null,
-        additionalPictures: [],
         isActive: true,
         createdBy: user.id,
         updatedBy: user.id

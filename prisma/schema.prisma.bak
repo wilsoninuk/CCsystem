@@ -14,13 +14,9 @@ model User {
   password   String
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
-  image         String?   
-  emailVerified DateTime? 
   quotations Quotation[]
   createdProducts Product[] @relation("ProductCreator")
   updatedProducts Product[] @relation("ProductUpdater")
-  accounts      Account[]
-  sessions      Session[]
 }
 
 model Product {
@@ -38,8 +34,8 @@ model Product {
   link1688       String?
   material       String?
   moq            Int?
-  picture        String?                // 主图URL
-  additionalPictures String[]           // 附图URLs
+  picture        String?
+  additionalPictures String[]
   productSize    String?
   supplier       String?
   category       String?
@@ -50,24 +46,9 @@ model Product {
   quotationItems QuotationItem[]
   creator        User?     @relation("ProductCreator", fields: [createdBy], references: [id])
   updater        User?     @relation("ProductUpdater", fields: [updatedBy], references: [id])
-  images         ProductImage[]         // 关联到 ProductImage 模型
 
   @@index([createdBy])
   @@index([updatedBy])
-}
-
-model ProductImage {
-  id        String   @id @default(cuid())
-  url       String   // 图片URL
-  isMain    Boolean  @default(false)  // 是否为主图
-  order     Int      @default(0)      // 图片顺序
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@index([isMain])
 }
 
 model Customer {
@@ -179,34 +160,4 @@ model ProductQuote {
 
   @@index([productId])
   @@index([customerId])
-}
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-  @@index([userId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
 }
