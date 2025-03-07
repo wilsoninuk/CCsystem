@@ -6,13 +6,34 @@ export default async function ProductQuotesPage({
 }: { 
   params: { id: string } 
 }) {
-  const quotes = await prisma.productQuote.findMany({
+  const quotes = await prisma.quotationItem.findMany({
     where: { productId: id },
     include: {
-      customer: true
+      quotation: {
+        include: {
+          customer: true
+        }
+      }
     },
-    orderBy: { updatedAt: 'desc' }
+    orderBy: { 
+      quotation: {
+        updatedAt: 'desc'
+      }
+    }
   })
 
-  return <QuotesClient quotes={quotes} />
+  // 转换数据格式以适应组件需求
+  const formattedQuotes = quotes.map(item => ({
+    id: item.id,
+    quotationId: item.quotationId,
+    quotationNumber: item.quotation.number,
+    customerId: item.quotation.customerId,
+    customer: item.quotation.customer,
+    quantity: item.quantity,
+    priceRMB: item.exwPriceRMB,
+    priceUSD: item.exwPriceUSD,
+    updatedAt: item.quotation.updatedAt
+  }))
+
+  return <QuotesClient quotes={formattedQuotes} />
 } 
