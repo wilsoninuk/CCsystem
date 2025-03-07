@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String
+  password   String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  quotations Quotation[]
+  createdProducts Product[] @relation("ProductCreator")
+  updatedProducts Product[] @relation("ProductUpdater")
+}
+
+model Product {
+  id             String                 @id @default(cuid())
+  barcode        String                 @unique(map: "Product_barcode_unique")
+  itemNo         String
+  description    String
+  cost           Float
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  cartonSize     String?
+  cartonWeight   Float?
+  color          String?
+  isActive       Boolean                @default(true)
+  link1688       String?
+  material       String?
+  moq            Int?
+  picture        String?
+  additionalPictures String[]
+  productSize    String?
+  supplier       String?
+  category       String?
+  createdBy      String?
+  updatedBy      String?
+  customerPrices CustomerProductPrice[]
+  productQuotes  ProductQuote[]
+  quotationItems QuotationItem[]
+  creator        User?     @relation("ProductCreator", fields: [createdBy], references: [id])
+  updater        User?     @relation("ProductUpdater", fields: [updatedBy], references: [id])
+
+  @@index([createdBy])
+  @@index([updatedBy])
+}
+
+model Customer {
+  id             String                 @id @default(cuid())
+  name           String
+  piAddress      String
+  shippingMethod String
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  code           String                 @unique
+  currency       String                 @default("USD")
+  exchangeRate   Float?
+  isActive       Boolean                @default(true)
+  paymentMethod  String
+  piShipper      String
+  remark         String?
+  productPrices  CustomerProductPrice[]
+  productQuotes  ProductQuote[]
+  quotations     Quotation[]
+}
+
+model CustomerProductPrice {
+  id         String   @id @default(cuid())
+  customerId String
+  price      Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  currency   String   @default("USD")
+  productId  String
+  remark     String?
+  customer   Customer @relation(fields: [customerId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+
+  @@unique([customerId, productId])
+  @@index([customerId])
+  @@index([productId])
+}
+
+model Quotation {
+  id             String              @id @default(cuid())
+  customerId     String
+  status         String
+  exchangeRate   Float
+  totalAmountRMB Float               @default(0)
+  totalAmountUSD Float               @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  number         String              @unique
+  remark         String?
+  userId         String
+  customerName   String
+  paymentMethod  String
+  piAddress      String
+  piShipper      String
+  shippingMethod String
+  customer       Customer            @relation(fields: [customerId], references: [id])
+  user           User                @relation(fields: [userId], references: [id])
+  items          QuotationItem[]
+  revisions      QuotationRevision[]
+
+  @@index([number])
+}
+
+model QuotationRevision {
+  id          String    @id @default(cuid())
+  quotationId String
+  version     Int
+  changes     Json
+  createdAt   DateTime  @default(now())
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+}
+
+model QuotationItem {
+  id            String    @id @default(cuid())
+  quotationId   String
+  barcode       String
+  serialNo      Int
+  quantity      Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  actualQty     Int?
+  exwPriceRMB   Float
+  exwPriceUSD   Float
+  finalPriceRMB Float?
+  finalPriceUSD Float?
+  profit        Float?
+  profitRate    Float?
+  remark        String?
+  shipping      Float?
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  quotation     Quotation @relation(fields: [quotationId], references: [id])
+  color         String?
+}
+
+model ProductQuote {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  productId  String
+  customerId String
+  price      Float
+  currency   String    @default("USD")
+  status     String    @default("active")
+  validUntil DateTime?
+  remark     String?
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  product    Product   @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([customerId])
+}
