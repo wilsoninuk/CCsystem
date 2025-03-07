@@ -51,6 +51,8 @@ model Product {
   creator        User?     @relation("ProductCreator", fields: [createdBy], references: [id])
   updater        User?     @relation("ProductUpdater", fields: [updatedBy], references: [id])
   images         ProductImage[]         // 关联到 ProductImage 模型
+  customerHistory CustomerProductHistory[]
+  invoiceItems   CommercialInvoiceItem[]  // 添加反向关联
 
   @@index([createdBy])
   @@index([updatedBy])
@@ -87,6 +89,8 @@ model Customer {
   productPrices  CustomerProductPrice[]
   productQuotes  ProductQuote[]
   quotations     Quotation[]
+  productHistory CustomerProductHistory[]
+  invoices       CommercialInvoice[]    // 添加反向关联
 }
 
 model CustomerProductPrice {
@@ -115,6 +119,7 @@ model Quotation {
   totalAmountUSD Float               @default(0)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+  shippingDate   DateTime?           // 出货时间
   number         String              @unique
   remark         String?
   userId         String
@@ -209,4 +214,64 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// 客户商品历史价格
+model CustomerProductHistory {
+  id          String    @id @default(cuid())
+  customerId  String    // 客户ID
+  productId   String    // 商品ID
+  priceRMB    Float     // 出货价格(RMB)
+  priceUSD    Float     // 出货价格(USD)
+  quantity    Int       // 出货数量
+  shippedAt   DateTime  // 出货时间
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // 关联
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
+
+  @@index([customerId])
+  @@index([productId])
+  @@index([shippedAt])
+}
+
+// 商业发票
+model CommercialInvoice {
+  id           String    @id @default(cuid())
+  number       String    @unique
+  customerId   String
+  status       String    @default("DRAFT")  // DRAFT, COMPLETED, CANCELLED
+  shippingDate DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  remark       String?
+
+  // 关联
+  customer     Customer  @relation(fields: [customerId], references: [id])
+  items        CommercialInvoiceItem[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([shippingDate])
+}
+
+// 商业发票明细
+model CommercialInvoiceItem {
+  id          String    @id @default(cuid())
+  ciId        String    // Commercial Invoice ID
+  productId   String
+  quantity    Int
+  priceRMB    Float
+  priceUSD    Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // 关联
+  ci          CommercialInvoice @relation(fields: [ciId], references: [id])
+  product     Product           @relation(fields: [productId], references: [id])
+
+  @@index([ciId])
+  @@index([productId])
 }

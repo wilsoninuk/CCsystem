@@ -14,23 +14,28 @@ export default async function QuotationPage(props: PageProps) {
   const { id } = await Promise.resolve(props.params)
   
   const quotation = await prisma.quotation.findUnique({
-    where: { id },
+    where: {
+      id: id
+    },
     include: {
       customer: true,
+      user: true,
       items: {
         include: {
           product: {
-            select: {
-              itemNo: true,
-              description: true,
-              picture: true,
-              material: true,
-              color: true,
-              productSize: true,
-              cartonSize: true,
-              moq: true,
+            include: {
+              images: {
+                where: {
+                  isMain: true
+                }
+              }
             }
           }
+        }
+      },
+      revisions: {
+        orderBy: {
+          createdAt: 'desc'
         }
       }
     }
@@ -52,7 +57,11 @@ export default async function QuotationPage(props: PageProps) {
             {quotation.status === 'official' ? '正式' : '草稿'}
           </Badge>
         </div>
-        <StatusActions id={id} status={quotation.status} />
+        <StatusActions 
+          id={id} 
+          status={quotation.status} 
+          shippingDate={quotation.shippingDate}
+        />
       </div>
       <QuotationDetail quotation={quotation} />
     </div>

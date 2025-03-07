@@ -6,41 +6,41 @@ import { NextResponse } from "next/server"
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const include = searchParams.get('include')?.split(',') || []
+    const search = searchParams.get('search') || ''
+    const category = searchParams.get('category')
+    const supplier = searchParams.get('supplier')
+
+    // 构建查询条件
+    const where = {
+      AND: [
+        // 如果有搜索关键词，匹配商品编号、条形码或描述
+        search ? {
+          OR: [
+            { itemNo: { contains: search } },
+            { barcode: { contains: search } },
+            { description: { contains: search } }
+          ]
+        } : {},
+        // 如果选择了品类且不是 "all"，匹配品类
+        category && category !== 'all' ? { category } : {},
+        // 如果选择了供应商且不是 "all"，匹配供应商
+        supplier && supplier !== 'all' ? { supplier } : {},
+        // 只返回激活状态的商品
+        { isActive: true }
+      ]
+    }
 
     const products = await prisma.product.findMany({
+      where,
       include: {
-        images: true,
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true
-          }
-        },
-        updater: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true
-          }
-        }
+        images: true
       },
       orderBy: {
         updatedAt: 'desc'
       }
     })
 
-    // 确保返回的数据中包含完整的用户信息
-    const productsWithUserInfo = products.map(product => ({
-      ...product,
-      creator: product.creator || null,
-      updater: product.updater || null
-    }))
-
-    return NextResponse.json(productsWithUserInfo)
+    return NextResponse.json(products)
   } catch (error) {
     console.error('获取商品列表失败:', error)
     return NextResponse.json(

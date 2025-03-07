@@ -91,7 +91,7 @@ export function QuotationItems({
   const totalProfit = items.reduce((sum, item) => {
     const totalRMB = (item.exwPriceRMB || 0) * item.quantity
     const shipping = item.shipping || 0
-    const totalCost = (item.product.cost + shipping) * item.quantity
+    const totalCost = item.product.cost * item.quantity + shipping
     return sum + (totalRMB - totalCost)
   }, 0)
 
@@ -168,7 +168,7 @@ export function QuotationItems({
               newItems[index] = {
                 ...item,
                 exwPriceRMB: newPrice,
-                exwPriceUSD: newPrice / exchangeRate
+                exwPriceUSD: Number((newPrice / exchangeRate).toFixed(2))
               }
               onItemsChangeAction(newItems)
             }}
@@ -188,7 +188,7 @@ export function QuotationItems({
               newItems[index] = {
                 ...item,
                 exwPriceUSD: newPrice,
-                exwPriceRMB: newPrice * exchangeRate
+                exwPriceRMB: Number((newPrice * exchangeRate).toFixed(2))
               }
               onItemsChangeAction(newItems)
             }}
@@ -201,7 +201,7 @@ export function QuotationItems({
         return `$${formatNumber((item.exwPriceUSD || 0) * item.quantity)}`
       case "profit":
         const profit = (item.exwPriceRMB || 0) * item.quantity - 
-          (item.product.cost + (item.shipping || 0)) * item.quantity
+          (item.product.cost * item.quantity + (item.shipping || 0))
         return (
           <span className={cn(
             profit > 0 ? "text-green-600" : profit < 0 ? "text-red-600" : ""
@@ -223,6 +223,46 @@ export function QuotationItems({
             }}
             className="w-32"
           />
+        )
+      case "historyPriceRMB":
+        if (!item.historyPrice?.price) {
+          console.log('无历史价格:', {
+            productId: item.productId,
+            historyPrice: item.historyPrice,
+            message: '没有找到历史出货价格'
+          })
+          return "-"
+        }
+        console.log('显示历史价格:', {
+          productId: item.productId,
+          price: item.historyPrice.price,
+          date: item.historyPrice.date,
+          status: item.historyPrice.status,
+          currentPrice: item.exwPriceRMB
+        })
+        const priceDate = item.historyPrice.date ? 
+          new Date(item.historyPrice.date).toLocaleDateString('zh-CN') : ''
+        const status = item.historyPrice.status ? 
+          item.historyPrice.status === 'COMPLETED' ? '已出货' :
+          item.historyPrice.status === 'SHIPPED' ? '已出货' :
+          item.historyPrice.status === 'PI_GENERATED' ? 'PI报价' :
+          item.historyPrice.status === 'CI_GENERATED' ? 'CI报价' : '' : ''
+        
+        const historyPrice = item.historyPrice.price
+        const currentPrice = item.exwPriceRMB || 0
+        const priceDiff = currentPrice - historyPrice
+        
+        return (
+          <div 
+            className={cn(
+              "text-right whitespace-nowrap",
+              priceDiff > 0 ? "text-red-600" : 
+              priceDiff < 0 ? "text-green-600" : ""
+            )} 
+            title={`${priceDate} ${status}`}
+          >
+            ¥{formatNumber(historyPrice)}
+          </div>
         )
       default:
         return null
@@ -262,7 +302,7 @@ export function QuotationItems({
             const totalRMB = (item.exwPriceRMB || 0) * item.quantity
             const totalUSD = (item.exwPriceUSD || 0) * item.quantity
             const shipping = item.shipping || 0
-            const totalCost = (item.product.cost + shipping) * item.quantity
+            const totalCost = item.product.cost * item.quantity + shipping
             const profit = totalRMB - totalCost
 
             const hasChanges = 

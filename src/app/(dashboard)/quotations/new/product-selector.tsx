@@ -20,7 +20,13 @@ import { Product } from "@prisma/client"
 import Image from "next/image"
 
 interface ProductSelectorProps {
-  onSelect: (product: Pick<Product, "id" | "itemNo" | "barcode" | "description" | "picture" | "cost"> & {
+  onSelect: (product: {
+    id: string
+    itemNo: string
+    barcode: string
+    description: string
+    picture: string | null
+    cost: number
     supplier: { name: string }
   }) => void
 }
@@ -28,7 +34,15 @@ interface ProductSelectorProps {
 export function ProductSelector({ onSelect }: ProductSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [products, setProducts] = useState<Product[]>([])
+  const [products, setProducts] = useState<Array<{
+    id: string
+    itemNo: string
+    barcode: string
+    description: string
+    picture: string | null
+    cost: number
+    supplier: { name: string }
+  }>>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -84,30 +98,26 @@ export function ProductSelector({ onSelect }: ProductSelectorProps) {
                       key={product.id}
                       role="option"
                       onClick={() => {
-                        onSelect({
-                          id: product.id,
-                          itemNo: product.itemNo,
-                          barcode: product.barcode,
-                          description: product.description,
-                          picture: product.picture,
-                          cost: product.cost,
-                          supplier: { name: product.supplier || '未知供应商' }
-                        })
+                        onSelect(product)
                         setOpen(false)
                         setSearchTerm("")
                       }}
                       className="flex items-start gap-2 p-2 rounded-md hover:bg-accent cursor-pointer"
                     >
-                      {product.picture && (
-                        <div className="relative w-12 h-12 flex-shrink-0">
+                      <div className="relative w-12 h-12 flex-shrink-0">
+                        {product.picture ? (
                           <Image
                             src={product.picture}
                             alt={product.description}
                             fill
                             className="object-cover rounded-sm"
                           />
-                        </div>
-                      )}
+                        ) : (
+                          <div className="w-full h-full bg-muted flex items-center justify-center rounded-sm">
+                            <span className="text-xs text-muted-foreground">无图片</span>
+                          </div>
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium">
                           {product.itemNo}

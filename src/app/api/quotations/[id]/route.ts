@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 
 export async function PATCH(
   request: Request,
@@ -115,6 +117,80 @@ export async function DELETE(
 
     return NextResponse.json(
       { message: '删除报价单失败' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 })
+    }
+
+    const data = await request.json()
+
+    // 计算总金额
+    let totalAmountRMB = 0
+    let totalAmountUSD = 0
+    data.items.forEach((item: any) => {
+      const itemTotalRMB = item.priceRMB * item.quantity
+      const itemTotalUSD = item.priceUSD * item.quantity
+      totalAmountRMB += itemTotalRMB
+      totalAmountUSD += itemTotalUSD
+    })
+
+    // 更新报价单
+    const quotation = await prisma.quotation.update({
+      where: { id: params.id },
+      data: {
+        exchangeRate: data.exchangeRate,
+        totalAmountRMB: totalAmountRMB,
+        totalAmountUSD: totalAmountUSD,
+        items: {
+          deleteMany: {},  // 删除所有现有项目
+          create: data.items.map((item: any, index: number) => ({
+            serialNo: index + 1,
+            productId: item.productId,
+            barcode: item.barcode,
+            quantity: item.quantity,
+            exwPriceRMB: item.priceRMB,
+            exwPriceUSD: item.priceUSD,
+            shipping: item.shipping,
+            remark: item.remark,
+            actualQty: item.actualQty,
+            finalPriceRMB: item.finalPriceRMB,
+            finalPriceUSD: item.finalPriceUSD,
+            profit: item.profit,
+            profitRate: item.profitRate,
+            color: item.color
+          }))
+        }
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                images: {
+                  where: { isMain: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    return NextResponse.json(quotation)
+  } catch (error) {
+    console.error('更新报价单失败:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '更新报价单失败' },
       { status: 500 }
     )
   }

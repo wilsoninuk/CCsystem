@@ -13,25 +13,20 @@ import {
 } from "@/components/ui/table"
 import { formatDate } from "@/lib/utils"
 import { FileText, FileDown } from "lucide-react"
-import type { Quotation, QuotationItem, Customer, Product } from "@prisma/client"
+import type { Quotation, QuotationItem, Customer, Product, ProductImage as ProductImageType, User, QuotationRevision } from "@prisma/client"
 import { ProductImage } from "@/components/ui/image"
 import { exportToExcel } from "@/lib/excel"
 
 interface QuotationDetailProps {
   quotation: Quotation & {
     customer: Customer
+    user: User
     items: (QuotationItem & {
-      product: Pick<Product, 
-        "itemNo" | "description" | "picture" | "material" | 
-        "color" | "productSize" | "cartonSize" | "moq"
-      >
+      product: Product & {
+        images: ProductImageType[]
+      }
     })[]
-  } & {
-    customerName: string
-    piAddress: string
-    piShipper: string
-    paymentMethod: string
-    shippingMethod: string
+    revisions: QuotationRevision[]
   }
 }
 
@@ -57,7 +52,7 @@ export function QuotationDetail({ quotation }: QuotationDetailProps) {
             exchangeRate: quotation.exchangeRate,
             items: quotation.items.map(item => ({
               serialNo: item.serialNo,
-              picture: item.product.picture,
+              picture: item.product.images[0]?.url,
               itemNo: item.product.itemNo,
               barcode: item.barcode,
               description: item.product.description,
@@ -171,7 +166,7 @@ export function QuotationDetail({ quotation }: QuotationDetailProps) {
               <TableCell>
                 <div className="relative w-16 h-16">
                   <ProductImage
-                    src={item.product.picture}
+                    src={item.product.images[0]?.url}
                     alt={item.product.description}
                   />
                 </div>

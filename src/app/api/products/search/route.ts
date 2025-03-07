@@ -15,9 +15,9 @@ export async function GET(request: Request) {
     const products = await prisma.product.findMany({
       where: {
         OR: [
-          { itemNo: { contains: query, mode: 'insensitive' } },     // 添加 insensitive
-          { barcode: { contains: query, mode: 'insensitive' } },    // 添加 insensitive
-          { description: { contains: query, mode: 'insensitive' } }, // 添加 insensitive
+          { itemNo: { contains: query, mode: 'insensitive' } },
+          { barcode: { contains: query, mode: 'insensitive' } },
+          { description: { contains: query, mode: 'insensitive' } },
         ],
         isActive: true
       },
@@ -26,8 +26,17 @@ export async function GET(request: Request) {
         itemNo: true,
         barcode: true,
         description: true,
-        picture: true,
         cost: true,
+        supplier: true,
+        images: {
+          where: {
+            isMain: true
+          },
+          select: {
+            url: true
+          },
+          take: 1
+        }
       },
       take: 10,
       orderBy: {
@@ -35,29 +44,22 @@ export async function GET(request: Request) {
       }
     })
 
-    console.log('找到商品数量:', products.length)
-    console.log('商品列表:', products)
+    // 转换数据格式
+    const formattedProducts = products.map(product => ({
+      id: product.id,
+      itemNo: product.itemNo,
+      barcode: product.barcode,
+      description: product.description,
+      picture: product.images[0]?.url || null,
+      cost: product.cost,
+      supplier: {
+        name: product.supplier || ''
+      }
+    }))
 
-    const allProducts = await prisma.product.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        itemNo: true,
-        barcode: true,
-        description: true,
-        picture: true,
-        cost: true,
-      },
-      take: 10
-    });
+    console.log('找到商品数量:', formattedProducts.length)
 
-    console.log('所有商品:', allProducts);
-
-    if (allProducts.length === 0) {
-      console.log('数据库中没有商品数据');
-    }
-
-    return NextResponse.json(products)
+    return NextResponse.json(formattedProducts)
   } catch (error) {
     console.error('搜索商品失败:', error)
     return NextResponse.json(

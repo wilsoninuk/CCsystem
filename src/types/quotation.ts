@@ -1,4 +1,5 @@
 import type { Product } from "@prisma/client"
+import { HistoryPrice } from "@/lib/services/price-history"
 
 export interface QuotationItem {
   id: string
@@ -7,8 +8,8 @@ export interface QuotationItem {
   barcode: string
   serialNo: number
   quantity: number
-  exwPriceRMB: number
-  exwPriceUSD: number
+  exwPriceRMB: number | null
+  exwPriceUSD: number | null
   shipping: number | null
   remark: string | null
   actualQty: number | null
@@ -30,4 +31,5 @@ export interface QuotationItem {
     }
   }
   color?: 'blue' | 'purple' | 'pink' | null
+  historyPrice?: HistoryPrice
 } 

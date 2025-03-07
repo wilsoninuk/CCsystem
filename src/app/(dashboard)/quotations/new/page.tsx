@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db"
-import { NewQuotationForm } from "./new-quotation-form"
+import { NewQuotationFormWrapper } from "./new-quotation-form-wrapper"
 
 export default async function NewQuotationPage() {
   // 获取所有客户信息
@@ -19,5 +19,5 @@ export default async function NewQuotationPage() {
     orderBy: { code: 'asc' }
   })
 
-  return <NewQuotationForm customers={customers} />
+  return <NewQuotationFormWrapper customers={customers} />
 } 
