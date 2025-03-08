@@ -4,8 +4,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url = env("POSTGRES_PRISMA_URL") // 使用 Vercel Postgres 环境变量
-  directUrl = env("POSTGRES_URL_NON_POOLING") // 用于直接连接（例如：数据库迁移）
+  url = env("POSTGRES_PRISMA_URL") // 使用带连接池的 URL
+  directUrl = env("POSTGRES_URL_NON_POOLING") // 使用不带连接池的 URL，用于数据库迁移
 }
 
 model User {

@@ -87,6 +87,28 @@
 - React Query (数据获取)
 - React Hook Form (表单处理)
 
+## 环境变量配置
+
+### 本地开发环境
+```bash
+# .env
+DATABASE_URL="postgresql://postgres:your_password@localhost:5432/trade_system?schema=public"
+```
+
+### Vercel 生产环境
+以下是生产环境需要的环境变量：
+
+1. 数据库相关（由 Vercel Postgres 自动配置）：
+- POSTGRES_PRISMA_URL
+- POSTGRES_URL_NON_POOLING
+- 其他数据库相关变量...
+
+2. NextAuth 认证相关：
+- NEXTAUTH_SECRET="c8f12f4b89c6e9f158b24fb4c7c7c1c8f12f4b89c6e9f158b24fb4c7c7c1"
+- NEXTAUTH_URL="https://你的项目域名.vercel.app"
+
+注意：NEXTAUTH_SECRET 是用于加密会话的密钥，请勿在生产环境中更改此值，否则所有用户都需要重新登录。
+
 ## 本地开发
 
 1. 安装依赖
