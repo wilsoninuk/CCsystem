@@ -20,6 +20,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
 
 interface NewQuotationFormProps {
@@ -35,6 +36,13 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
   const [selectedProduct, setSelectedProduct] = useState<QuotationItemType | null>(null)
   const [isManualNumber, setIsManualNumber] = useState(false)
   const [manualNumber, setManualNumber] = useState('')
+  const [duplicateDialog, setDuplicateDialog] = useState<{
+    open: boolean;
+    products: Array<{ barcode: string; description: string }>;
+  }>({
+    open: false,
+    products: []
+  });
 
   const handleAddProduct = async (product: Pick<Product, "id" | "itemNo" | "barcode" | "description" | "picture" | "cost"> & {
     supplier: { name: string }
@@ -89,47 +97,114 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
   }
 
   const handleProductsSelected = async (products: Array<{ product: Product & { images?: ProductImage[] }; quantity: number }>) => {
-    // 获取所有产品的历史价格
-    const productIds = products.map(p => p.product.id)
-    const historyPrices = customerId ? 
-      await getProductsHistoryPrices(productIds, customerId) : 
-      new Map()
+    // 检查重复商品
+    const duplicateProducts = products.filter(({ product }) => 
+      items.some(item => item.barcode === product.barcode)
+    )
 
-    const newItems: QuotationItemType[] = products.map(({ product, quantity }) => ({
-      id: '',
-      quotationId: '',
-      productId: product.id,
-      barcode: product.barcode,
-      serialNo: items.length + 1,
-      quantity: quantity,
-      exwPriceRMB: product.cost || 0,
-      exwPriceUSD: Number(((product.cost || 0) / exchangeRate).toFixed(2)),
-      shipping: null,
-      remark: null,
-      actualQty: null,
-      finalPriceRMB: null,
-      finalPriceUSD: null,
-      profit: null,
-      profitRate: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      product: {
-        id: product.id,
-        itemNo: product.itemNo,
+    // 如果有重复商品，显示对话框
+    if (duplicateProducts.length > 0) {
+      setDuplicateDialog({
+        open: true,
+        products: duplicateProducts.map(({ product }) => ({
+          barcode: product.barcode,
+          description: product.description
+        }))
+      });
+      // 过滤掉重复商品
+      const newProducts = products.filter(({ product }) => 
+        !items.some(item => item.barcode === product.barcode)
+      )
+      // 如果没有可添加的新商品，直接返回
+      if (newProducts.length === 0) {
+        return;
+      }
+      // 获取所有产品的历史价格
+      const productIds = newProducts.map(p => p.product.id);
+      const historyPrices = customerId ? 
+        await getProductsHistoryPrices(productIds, customerId) : 
+        new Map();
+
+      const newItems: QuotationItemType[] = newProducts.map(({ product, quantity }) => ({
+        id: '',
+        quotationId: '',
+        productId: product.id,
         barcode: product.barcode,
-        description: product.description,
-        picture: product.images?.[0]?.url || null,
-        cost: product.cost || 0,
-        supplier: {
-          name: product.supplier
+        serialNo: items.length + 1,
+        quantity: quantity,
+        exwPriceRMB: product.cost || 0,
+        exwPriceUSD: Number(((product.cost || 0) / exchangeRate).toFixed(2)),
+        shipping: null,
+        remark: null,
+        actualQty: null,
+        finalPriceRMB: null,
+        finalPriceUSD: null,
+        profit: null,
+        profitRate: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        product: {
+          id: product.id,
+          itemNo: product.itemNo,
+          barcode: product.barcode,
+          description: product.description,
+          picture: product.images?.[0]?.url || null,
+          cost: product.cost || 0,
+          category: product.category,
+          supplier: {
+            name: product.supplier || ''
+          },
+          images: product.images || []
         },
-        images: product.images || []  // 确保包含完整的图片数组
-      },
-      color: null,
-      historyPrice: historyPrices.get(product.id) || null
-    }))
+        color: null,
+        historyPrice: historyPrices.get(product.id) || null
+      }))
 
-    setItems(prev => [...prev, ...newItems])
+      setItems(prev => [...prev, ...newItems])
+    } else {
+      // 如果没有重复商品，直接添加所有商品
+      const productIds = products.map(p => p.product.id);
+      const historyPrices = customerId ? 
+        await getProductsHistoryPrices(productIds, customerId) : 
+        new Map();
+
+      const newItems: QuotationItemType[] = products.map(({ product, quantity }) => ({
+        id: '',
+        quotationId: '',
+        productId: product.id,
+        barcode: product.barcode,
+        serialNo: items.length + 1,
+        quantity: quantity,
+        exwPriceRMB: product.cost || 0,
+        exwPriceUSD: Number(((product.cost || 0) / exchangeRate).toFixed(2)),
+        shipping: null,
+        remark: null,
+        actualQty: null,
+        finalPriceRMB: null,
+        finalPriceUSD: null,
+        profit: null,
+        profitRate: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        product: {
+          id: product.id,
+          itemNo: product.itemNo,
+          barcode: product.barcode,
+          description: product.description,
+          picture: product.images?.[0]?.url || null,
+          cost: product.cost || 0,
+          category: product.category,
+          supplier: {
+            name: product.supplier || ''
+          },
+          images: product.images || []
+        },
+        color: null,
+        historyPrice: historyPrices.get(product.id) || null
+      }))
+
+      setItems(prev => [...prev, ...newItems])
+    }
   }
 
   const handleImageClick = (item: QuotationItemType) => {
@@ -303,6 +378,31 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* 重复商品提示对话框 */}
+        <Dialog open={duplicateDialog.open} onOpenChange={(open) => setDuplicateDialog(prev => ({ ...prev, open }))}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>发现重复商品</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p>以下商品已存在，已自动过滤：</p>
+              <div className="max-h-[300px] overflow-y-auto space-y-2">
+                {duplicateDialog.products.map((product, index) => (
+                  <div key={index} className="p-2 border rounded">
+                    <div className="font-mono text-sm">{product.barcode}</div>
+                    <div className="text-sm text-gray-600">{product.description}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setDuplicateDialog(prev => ({ ...prev, open: false }))}>
+                确定
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </form>
   )

@@ -84,6 +84,7 @@ export default async function EditQuotationPage({ params }: { params: { id: stri
         },
         picture: item.product.images?.[0]?.url || null,
         barcode: item.product.barcode || '',
+        category: item.product.category,
         images: Array.isArray(item.product.images) ? item.product.images : []  // 确保包含完整的图片数组
       },
       barcode: item.barcode,

@@ -15,7 +15,7 @@ import { formatDate } from "@/lib/utils"
 import { FileText, FileDown } from "lucide-react"
 import type { Quotation, QuotationItem, Customer, Product, ProductImage as ProductImageType, User, QuotationRevision } from "@prisma/client"
 import { ProductImage } from "@/components/ui/image"
-import { exportToExcel } from "@/lib/excel"
+import { exportQuotationDetail } from "@/lib/excel"
 
 interface QuotationDetailProps {
   quotation: Quotation & {
@@ -35,38 +35,7 @@ export function QuotationDetail({ quotation }: QuotationDetailProps) {
 
   const handleExport = async () => {
     try {
-      await exportToExcel({
-        fileName: `报价单-${quotation.number}`,
-        sheets: [{
-          name: '报价单',
-          data: {
-            title: `报价单 ${quotation.number}`,
-            date: formatDate(quotation.createdAt),
-            customer: {
-              name: quotation.customerName,
-              piAddress: quotation.piAddress,
-              piShipper: quotation.piShipper,
-              paymentMethod: quotation.paymentMethod,
-              shippingMethod: quotation.shippingMethod,
-            },
-            exchangeRate: quotation.exchangeRate,
-            items: quotation.items.map(item => ({
-              serialNo: item.serialNo,
-              picture: item.product.images[0]?.url,
-              itemNo: item.product.itemNo,
-              barcode: item.barcode,
-              description: item.product.description,
-              quantity: item.quantity,
-              priceRMB: item.exwPriceRMB,
-              priceUSD: item.exwPriceUSD,
-              totalRMB: item.exwPriceRMB * item.quantity,
-              totalUSD: item.exwPriceUSD * item.quantity,
-            })),
-            totalRMB: quotation.totalAmountRMB,
-            totalUSD: quotation.totalAmountUSD,
-          }
-        }]
-      })
+      await exportQuotationDetail(quotation)
     } catch (error) {
       console.error('导出Excel失败:', error)
     }
@@ -184,9 +153,13 @@ export function QuotationDetail({ quotation }: QuotationDetailProps) {
         </TableBody>
         <TableFooter>
           <TableRow>
-            <TableCell colSpan={8} className="text-right font-bold">
+            <TableCell colSpan={5} className="text-right font-bold">
               总计:
             </TableCell>
+            <TableCell className="font-bold">
+              {quotation.items.reduce((sum, item) => sum + item.quantity, 0)}
+            </TableCell>
+            <TableCell colSpan={2} className="text-right font-bold" />
             <TableCell className="font-bold">
               ¥{quotation.totalAmountRMB.toFixed(2)}
             </TableCell>

@@ -22,7 +22,7 @@ interface Product {
   itemNo: string
   barcode: string
   description: string
-  category: string
+  category: string | null
   supplier: string
   cost?: number
   images: Array<{
@@ -142,13 +142,13 @@ export function ProductSelectorDialog({
               />
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <Label>品类</Label>
+                  <Label>类别</Label>
                   <Select
                     value={filters.category}
                     onValueChange={(value) => setFilters(prev => ({ ...prev, category: value }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="选择品类" />
+                      <SelectValue placeholder="选择类别" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">全部</SelectItem>

@@ -26,6 +26,7 @@ export interface QuotationItem {
     description: string
     picture: string | null
     cost: number
+    category: string | null
     supplier: {
       name: string
     }

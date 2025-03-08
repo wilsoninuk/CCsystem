@@ -18,7 +18,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
+import { exportQuotationToExcel } from '@/lib/excel'
 
 const queryClient = new QueryClient()
 
@@ -74,35 +76,100 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
   const [exchangeRate, setExchangeRate] = useState(quotation.exchangeRate)
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<QuotationItemType | null>(null)
+  const [duplicateDialog, setDuplicateDialog] = useState<{
+    open: boolean;
+    products: Array<{ barcode: string; description: string }>;
+  }>({
+    open: false,
+    products: []
+  });
 
   const handleProductsSelected = (products: Array<{ product: Product & { images?: ProductImage[] }; quantity: number }>) => {
-    // 获取所有新添加产品的历史价格
-    const productIds = products.map(p => p.product.id)
-    getProductsHistoryPrices(productIds, quotation.customerId).then(historyPrices => {
-      const newItems: QuotationItemType[] = products.map(({ product, quantity }) => {
-        // 先打印一下完整的商品数据，看看 images 是否存在
-        console.log('添加商品时的完整数据:', {
-          productId: product.id,
-          product: product,
-          images: product.images || [],
-          picture: product.picture
+    // 检查重复商品
+    const duplicateProducts = products.filter(({ product }) => 
+      items.some(item => item.barcode === product.barcode)
+    )
+
+    // 如果有重复商品，显示对话框
+    if (duplicateProducts.length > 0) {
+      setDuplicateDialog({
+        open: true,
+        products: duplicateProducts.map(({ product }) => ({
+          barcode: product.barcode,
+          description: product.description
+        }))
+      });
+      // 过滤掉重复商品
+      const newProducts = products.filter(({ product }) => 
+        !items.some(item => item.barcode === product.barcode)
+      )
+      // 如果没有可添加的新商品，直接返回
+      if (newProducts.length === 0) {
+        return;
+      }
+      // 获取所有新添加产品的历史价格
+      const productIds = newProducts.map(p => p.product.id);
+      getProductsHistoryPrices(productIds, quotation.customerId).then(historyPrices => {
+        const newItems: QuotationItemType[] = newProducts.map(({ product, quantity }) => {
+          // 先打印一下完整的商品数据，看看 category 是否存在
+          console.log('添加商品时的完整数据:', {
+            productId: product.id,
+            product: product,
+            category: product.category,
+            images: product.images || [],
+            picture: product.picture
+          })
+
+          // 确保 product 对象的结构与已有的产品数据结构一致
+          const processedProduct = {
+            id: product.id,
+            itemNo: product.itemNo,
+            barcode: product.barcode || '',
+            description: product.description,
+            picture: product.picture,
+            cost: product.cost || 0,
+            category: product.category,  // 确保包含 category
+            supplier: {
+              name: product.supplier || ''
+            },
+            images: product.images || []
+          }
+
+          return {
+            id: '',
+            quotationId: quotation.id,
+            productId: product.id,
+            barcode: product.barcode,
+            serialNo: items.length + 1,
+            quantity: quantity,
+            exwPriceRMB: product.cost || 0,
+            exwPriceUSD: (product.cost || 0) / exchangeRate,
+            shipping: null,
+            remark: null,
+            actualQty: null,
+            finalPriceRMB: null,
+            finalPriceUSD: null,
+            profit: null,
+            profitRate: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            product: processedProduct,
+            color: null,
+            historyPrice: historyPrices.get(product.id) || {
+              price: null,
+              date: null,
+              status: null,
+              customerId: quotation.customerId
+            }
+          }
         })
-
-        // 确保 product 对象的结构与已有的产品数据结构一致
-        const processedProduct = {
-          id: product.id,
-          itemNo: product.itemNo,
-          barcode: product.barcode || '',
-          description: product.description,
-          picture: product.picture,
-          cost: product.cost || 0,
-          supplier: {
-            name: product.supplier || ''
-          },
-          images: product.images || []
-        }
-
-        return {
+        setItems(prev => [...prev, ...newItems])
+      })
+    } else {
+      // 如果没有重复商品，直接添加所有商品
+      const productIds = products.map(p => p.product.id);
+      getProductsHistoryPrices(productIds, quotation.customerId).then(historyPrices => {
+        const newItems: QuotationItemType[] = products.map(({ product, quantity }) => ({
           id: '',
           quotationId: quotation.id,
           productId: product.id,
@@ -120,7 +187,18 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
           profitRate: null,
           createdAt: new Date(),
           updatedAt: new Date(),
-          product: processedProduct,
+          product: {
+            id: product.id,
+            itemNo: product.itemNo,
+            barcode: product.barcode,
+            description: product.description,
+            picture: product.picture,
+            cost: product.cost,
+            supplier: {
+              name: product.supplier || ''
+            },
+            images: product.images || []
+          },
           color: null,
           historyPrice: historyPrices.get(product.id) || {
             price: null,
@@ -128,11 +206,10 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
             status: null,
             customerId: quotation.customerId
           }
-        }
+        }))
+        setItems(prev => [...prev, ...newItems])
       })
-
-      setItems(prev => [...prev, ...newItems])
-    })
+    }
   }
 
   const handleSubmit = async () => {
@@ -223,14 +300,6 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
     <div className="space-y-8 p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">编辑报价单</h1>
-        <div className="space-x-2">
-          <Button variant="outline" onClick={() => router.back()}>
-            取消
-          </Button>
-          <Button onClick={handleSubmit}>
-            保存
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-8">
@@ -253,13 +322,24 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setIsProductSelectorOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary/90"
-      >
-        添加商品
-      </button>
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => setIsProductSelectorOpen(true)}>
+            添加商品
+          </Button>
+          <Button variant="outline" onClick={() => exportQuotationToExcel(items, `报价单_${quotation.number}.xlsx`)}>
+            导出Excel
+          </Button>
+        </div>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => router.back()}>
+            返回
+          </Button>
+          <Button onClick={handleSubmit}>
+            保存
+          </Button>
+        </div>
+      </div>
 
       <ProductSelectorDialog
         open={isProductSelectorOpen}
@@ -295,6 +375,31 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* 重复商品提示对话框 */}
+      <Dialog open={duplicateDialog.open} onOpenChange={(open) => setDuplicateDialog(prev => ({ ...prev, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>发现重复商品</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>以下商品已存在，已自动过滤：</p>
+            <div className="max-h-[300px] overflow-y-auto space-y-2">
+              {duplicateDialog.products.map((product, index) => (
+                <div key={index} className="p-2 border rounded">
+                  <div className="font-mono text-sm">{product.barcode}</div>
+                  <div className="text-sm text-gray-600">{product.description}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setDuplicateDialog(prev => ({ ...prev, open: false }))}>
+              确定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

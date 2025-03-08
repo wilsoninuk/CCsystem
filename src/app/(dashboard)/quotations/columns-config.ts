@@ -2,6 +2,7 @@ export const QUOTATION_COLUMNS = [
   { key: "picture", label: "图片", required: true },
   { key: "itemNo", label: "商品编号", required: true },
   { key: "barcode", label: "条形码", required: false },
+  { key: "category", label: "类别", required: false },
   { key: "description", label: "描述", required: true },
   { key: "supplier", label: "供应商", required: false },
   { key: "cost", label: "成本价(RMB)", required: true },
