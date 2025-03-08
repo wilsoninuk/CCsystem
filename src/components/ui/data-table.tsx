@@ -29,6 +29,7 @@ interface DataTableProps<TData, TValue> {
   data: TData[]
   searchKey?: string
   onSelectedRowsChange?: (rows: TData[]) => void
+  onToggleActive?: (productId: string, currentStatus: boolean) => Promise<void>
 }
 
 export function DataTable<TData, TValue>({
@@ -36,6 +37,7 @@ export function DataTable<TData, TValue>({
   data,
   searchKey,
   onSelectedRowsChange,
+  onToggleActive,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -102,6 +104,9 @@ export function DataTable<TData, TValue>({
     },
     manualPagination: false,
     pageCount: Math.ceil(data.length / pagination.pageSize),
+    meta: {
+      onToggleActive: onToggleActive,
+    },
   })
 
   // 监听分页变化

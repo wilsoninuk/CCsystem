@@ -240,13 +240,33 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
     }
   },
   {
-    id: "actions",
+    accessorKey: "isActive",
+    header: "状态",
     cell: ({ row }) => {
+      const isActive = row.getValue<boolean>("isActive")
+      return (
+        <Badge variant={isActive ? "default" : "secondary"} className={isActive ? "bg-green-500 hover:bg-green-600 text-white" : ""}>
+          {isActive ? "已上线" : "已下线"}
+        </Badge>
+      )
+    }
+  },
+  {
+    id: "actions",
+    cell: ({ row, table }) => {
       const product = row.original
       const [editOpen, setEditOpen] = useState(false)
 
       return (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant={product.isActive ? "destructive" : "default"}
+            size="sm"
+            onClick={() => table.options.meta?.onToggleActive?.(product.id, product.isActive)}
+            className={product.isActive ? "hover:bg-red-600" : "hover:bg-green-600"}
+          >
+            {product.isActive ? "下线" : "上线"}
+          </Button>
           <Button
             variant="ghost"
             size="icon"

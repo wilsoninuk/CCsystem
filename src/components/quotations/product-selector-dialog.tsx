@@ -24,11 +24,13 @@ interface Product {
   description: string
   category: string
   supplier: string
-  images: Array<{
+  cost?: number
+  images?: Array<{
     id: string
     url: string
     isMain: boolean
   }>
+  picture?: string
 }
 
 interface ProductSelectorDialogProps {
@@ -56,13 +58,26 @@ export function ProductSelectorDialog({
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['products', filters],
     queryFn: async () => {
+      console.log('开始获取产品数据...')
       const searchParams = new URLSearchParams()
       if (filters.search) searchParams.append('search', filters.search)
       if (filters.category) searchParams.append('category', filters.category)
       if (filters.supplier) searchParams.append('supplier', filters.supplier)
       
       const response = await fetch(`/api/products?${searchParams.toString()}`)
-      return response.json()
+      const data = await response.json()
+      console.log('API返回的完整产品数据:', data)
+      
+      // 检查第一个产品的图片数据
+      if (data.length > 0) {
+        console.log('第一个产品的图片数据:', {
+          productId: data[0].id,
+          images: data[0].images,
+          picture: data[0].picture
+        })
+      }
+      
+      return data
     },
   })
 
@@ -176,7 +191,7 @@ export function ProductSelectorDialog({
                     <div className="w-[120px] truncate">{product.barcode}</div>
                     <div className="w-[20px] h-[20px] mx-2">
                       <ProductImage
-                        src={product.images.find(img => img.isMain)?.url || null}
+                        src={product.images?.find(img => img.isMain)?.url || product.picture || null}
                         alt={product.description}
                       />
                     </div>
@@ -201,7 +216,7 @@ export function ProductSelectorDialog({
                     <div className="flex items-center gap-2">
                       <div className="w-[20px] h-[20px]">
                         <ProductImage
-                          src={product.images.find(img => img.isMain)?.url || null}
+                          src={product.images?.find(img => img.isMain)?.url || product.picture || null}
                           alt={product.description}
                         />
                       </div>

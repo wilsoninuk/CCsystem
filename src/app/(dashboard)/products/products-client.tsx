@@ -281,6 +281,37 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
     }
   }
 
+  // 添加商品上下线处理函数
+  const handleToggleActive = async (productId: string, currentStatus: boolean) => {
+    try {
+      const response = await fetch(`/api/products/${productId}/toggle-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !currentStatus })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '更新状态失败')
+      }
+
+      // 更新本地状态
+      setProducts(prevProducts =>
+        prevProducts.map(product =>
+          product.id === productId
+            ? { ...product, isActive: !currentStatus }
+            : product
+        )
+      )
+
+      toast.success(`商品已${!currentStatus ? '上线' : '下线'}`)
+      router.refresh()
+    } catch (error) {
+      console.error('更新状态失败:', error)
+      toast.error(error instanceof Error ? error.message : '更新状态失败')
+    }
+  }
+
   console.log('importDialogOpen state:', importDialogOpen)
 
   console.log('Rendering ProductsClient, importDialogOpen:', importDialogOpen)
@@ -399,6 +430,7 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         onSelectedRowsChange={(rows) => {
           setSelectedRows(rows.map(row => row.id))
         }}
+        onToggleActive={handleToggleActive}
       />
     </div>
   )

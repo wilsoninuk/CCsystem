@@ -56,7 +56,7 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
         itemNo: product.itemNo,
         barcode: product.barcode,
         description: product.description,
-        picture: product.images?.[0]?.url || null,
+        picture: product.images?.find(img => img.isMain)?.url || product.picture || null,
         cost: product.cost || 0,
         supplier: {
           name: product.supplier || ''

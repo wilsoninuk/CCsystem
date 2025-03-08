@@ -1,44 +1,37 @@
 import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "../../auth/[...nextauth]/route"
 
 export async function DELETE(request: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 })
+    }
+
     const { ids } = await request.json()
 
-    // 添加日志
-    console.log('Attempting to delete products with ids:', ids)
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { error: "无效的商品ID列表" },
+        { status: 400 }
+      )
+    }
 
-    // 使用事务确保数据一致性
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. 删除相关的报价单项目
-      await tx.quotationItem.deleteMany({
-        where: {
-          productId: {
-            in: ids
-          }
+    // 软删除：将商品标记为已删除
+    const result = await prisma.product.updateMany({
+      where: {
+        id: {
+          in: ids
         }
-      })
-
-      // 2. 删除相关的客户商品价格记录
-      await tx.customerProductPrice.deleteMany({
-        where: {
-          productId: {
-            in: ids
-          }
-        }
-      })
-
-      // 3. 最后删除商品
-      return await tx.product.deleteMany({
-        where: {
-          id: {
-            in: ids
-          }
-        }
-      })
+      },
+      data: {
+        isDeleted: true,
+        updatedAt: new Date(),
+        updatedBy: session.user.id
+      }
     })
-
-    console.log('Delete result:', result)
 
     return NextResponse.json({ 
       success: true,
@@ -47,7 +40,7 @@ export async function DELETE(request: Request) {
   } catch (error) {
     console.error('批量删除失败:', error)
     return NextResponse.json(
-      { error: '批量删除失败: ' + (error as Error).message },
+      { error: `批量删除失败: ${error instanceof Error ? error.message : '未知错误'}` },
       { status: 500 }
     )
   }

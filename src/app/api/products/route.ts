@@ -6,34 +6,15 @@ import { NextResponse } from "next/server"
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const search = searchParams.get('search') || ''
-    const category = searchParams.get('category')
-    const supplier = searchParams.get('supplier')
-
-    // 构建查询条件
-    const where = {
-      AND: [
-        // 如果有搜索关键词，匹配商品编号、条形码或描述
-        search ? {
-          OR: [
-            { itemNo: { contains: search } },
-            { barcode: { contains: search } },
-            { description: { contains: search } }
-          ]
-        } : {},
-        // 如果选择了品类且不是 "all"，匹配品类
-        category && category !== 'all' ? { category } : {},
-        // 如果选择了供应商且不是 "all"，匹配供应商
-        supplier && supplier !== 'all' ? { supplier } : {},
-        // 只返回激活状态的商品
-        { isActive: true }
-      ]
-    }
-
+    
     const products = await prisma.product.findMany({
-      where,
+      where: {
+        isActive: true  // 只返回激活的商品
+      },
       include: {
-        images: true
+        images: true,  // 始终包含图片数据
+        creator: false,
+        updater: false,
       },
       orderBy: {
         updatedAt: 'desc'
