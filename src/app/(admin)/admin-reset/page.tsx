@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
-export default function ResetPasswordPage() {
+export default function AdminResetPage() {
   const handleReset = async () => {
     try {
       const response = await fetch('/api/admin/reset-admin', {
@@ -25,12 +25,12 @@ export default function ResetPasswordPage() {
   return (
     <div className="container max-w-2xl py-6">
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">重置管理员密码</h1>
+        <h1 className="text-2xl font-bold">管理员密码重置</h1>
         <p className="text-muted-foreground">
-          点击下面的按钮将管理员密码重置为默认密码（admin123）
+          此页面仅供系统管理员使用。点击下面的按钮将管理员密码重置为默认密码（admin123）
         </p>
         <Button onClick={handleReset}>
-          重置密码
+          重置管理员密码
         </Button>
       </div>
     </div>
