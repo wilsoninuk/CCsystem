@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 
 const ADMIN_EMAIL = "wilsoninuk@gmail.com"
-const DEFAULT_PASSWORD = "123456"
+const DEFAULT_PASSWORD = "admin123"
 
 export async function POST(request: Request) {
   try {
