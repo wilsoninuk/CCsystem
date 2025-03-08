@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db"
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 
+const ADMIN_EMAIL = "wilsoninuk@gmail.com"
+
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -28,6 +30,11 @@ export const authOptions: AuthOptions = {
 
         if (!user) {
           throw new Error('用户不存在')
+        }
+
+        // 检查用户状态
+        if (!user.isActive && user.email !== ADMIN_EMAIL) {
+          throw new Error('账号已被禁用')
         }
 
         const isValid = await bcrypt.compare(credentials.password, user.password)

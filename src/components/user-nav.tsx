@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { User, LogOut, Settings } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
+import Link from "next/link"
 
 export function UserNav() {
   const { data: session } = useSession()
@@ -42,9 +43,19 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>设置</span>
+          {isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link href="/users">
+                <User className="mr-2 h-4 w-4" />
+                <span>用户管理</span>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem asChild>
+            <Link href="/settings/change-password">
+              <Settings className="mr-2 h-4 w-4" />
+              <span>修改密码</span>
+            </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

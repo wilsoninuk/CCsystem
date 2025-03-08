@@ -6,6 +6,39 @@ import { authOptions } from "../../auth/[...nextauth]/route"
 
 const ADMIN_EMAIL = "wilsoninuk@gmail.com"
 
+// 获取用户列表
+export async function GET(request: Request) {
+  try {
+    // 检查是否是管理员
+    const session = await getServerSession(authOptions)
+    if (session?.user?.email !== ADMIN_EMAIL) {
+      return new Response("Unauthorized", { status: 401 })
+    }
+
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        isActive: true,
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+
+    return NextResponse.json(users)
+  } catch (error) {
+    console.error("获取用户列表失败:", error)
+    return NextResponse.json(
+      { error: "获取用户列表失败" },
+      { status: 500 }
+    )
+  }
+}
+
+// 创建新用户
 export async function POST(request: Request) {
   try {
     // 检查是否是管理员

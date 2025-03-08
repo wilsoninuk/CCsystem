@@ -16,6 +16,7 @@ model User {
   updatedAt  DateTime    @updatedAt
   image         String?   
   emailVerified DateTime? 
+  isActive    Boolean     @default(true)
   quotations Quotation[]
   createdProducts Product[] @relation("ProductCreator")
   updatedProducts Product[] @relation("ProductUpdater")
