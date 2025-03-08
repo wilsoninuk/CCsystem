@@ -40,7 +40,11 @@ export async function PATCH(
       include: {
         items: {
           include: {
-            product: true
+            product: {
+              include: {
+                images: true
+              }
+            }
           }
         }
       }
@@ -176,9 +180,7 @@ export async function PUT(
           include: {
             product: {
               include: {
-                images: {
-                  where: { isMain: true }
-                }
+                images: true  // 确保包含商品的图片数据
               }
             }
           }
@@ -186,11 +188,62 @@ export async function PUT(
       }
     })
 
+    // 打印一下返回的数据，看看 images 是否存在
+    console.log('API - 更新后的报价单数据:', JSON.stringify({
+      id: quotation.id,
+      items: quotation.items.map(item => ({
+        productId: item.productId,
+        images: item.product.images
+      }))
+    }, null, 2))
+
     return NextResponse.json(quotation)
   } catch (error) {
     console.error('更新报价单失败:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '更新报价单失败' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const quotation = await prisma.quotation.findUnique({
+      where: {
+        id: params.id
+      },
+      include: {
+        customer: true,
+        user: true,
+        items: {
+          include: {
+            product: {
+              include: {
+                images: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    console.log('API - 获取到的报价单数据:', JSON.stringify({
+      id: quotation?.id,
+      items: quotation?.items.map(item => ({
+        productId: item.productId,
+        images: item.product.images
+      }))
+    }, null, 2))
+
+    return NextResponse.json(quotation)
+  } catch (error) {
+    console.error('获取报价单失败:', error)
+    return NextResponse.json(
+      { error: '获取报价单失败' },
       { status: 500 }
     )
   }

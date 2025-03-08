@@ -25,10 +25,11 @@ interface Product {
   category: string
   supplier: string
   cost?: number
-  images?: Array<{
+  images: Array<{
     id: string
     url: string
     isMain: boolean
+    order: number
   }>
   picture?: string
 }
@@ -64,7 +65,7 @@ export function ProductSelectorDialog({
       if (filters.category) searchParams.append('category', filters.category)
       if (filters.supplier) searchParams.append('supplier', filters.supplier)
       
-      const response = await fetch(`/api/products?${searchParams.toString()}`)
+      const response = await fetch(`/api/products?${searchParams.toString()}&include_images=true`)
       const data = await response.json()
       console.log('API返回的完整产品数据:', data)
       
@@ -72,6 +73,7 @@ export function ProductSelectorDialog({
       if (data.length > 0) {
         console.log('第一个产品的图片数据:', {
           productId: data[0].id,
+          imagesCount: data[0].images?.length,
           images: data[0].images,
           picture: data[0].picture
         })

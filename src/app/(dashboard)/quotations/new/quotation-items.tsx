@@ -28,12 +28,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ColumnSelector } from "../column-selector"
 import { QUOTATION_COLUMNS } from "../columns-config"
+import { ProductImage } from "@/components/ui/product-image"
 
 interface QuotationItemsProps {
   customerId: string
   items: QuotationItem[]
   exchangeRate: number
   onItemsChangeAction: (items: QuotationItem[]) => void
+  onImageClick?: (item: QuotationItem) => void
 }
 
 // 定义颜色选项 - 使用更深的颜色
@@ -70,7 +72,8 @@ export function QuotationItems({
   customerId,
   items,
   exchangeRate,
-  onItemsChangeAction
+  onItemsChangeAction,
+  onImageClick
 }: QuotationItemsProps) {
   const [selectedProducts, setSelectedProducts] = useState<Product[]>([])
   const [selectedColumns, setSelectedColumns] = useState<string[]>([
@@ -99,16 +102,7 @@ export function QuotationItems({
   const renderCell = (key: string, item: QuotationItem, index: number) => {
     switch (key) {
       case "picture":
-        return item.product?.picture && (
-          <div className="relative w-10 h-10">
-            <Image
-              src={item.product.picture}
-              alt={item.product.description}
-              fill
-              className="object-cover rounded-sm"
-            />
-          </div>
-        )
+        return null
       case "itemNo":
         return item.product?.itemNo
       case "barcode":
@@ -291,7 +285,8 @@ export function QuotationItems({
       <Table>
         <TableHeader>
           <TableRow>
-            {visibleColumns.map(col => (
+            <TableHead>图片</TableHead>
+            {visibleColumns.filter(col => col.key !== 'picture').map(col => (
               <TableHead key={col.key}>{col.label}</TableHead>
             ))}
             <TableHead>操作</TableHead>
@@ -319,7 +314,33 @@ export function QuotationItems({
                   !item.color && hasChanges && 'bg-gray-50'
                 )}
               >
-                {visibleColumns.map(col => (
+                <TableCell>
+                  <div 
+                    className="relative w-16 h-16 cursor-pointer"
+                    onClick={() => {
+                      // 确保 images 数据存在
+                      const itemWithImages = {
+                        ...item,
+                        product: {
+                          ...item.product,
+                          images: item.product.images || []
+                        }
+                      }
+                      console.log('QuotationItems - 点击图片时的完整数据:', {
+                        productId: itemWithImages.productId,
+                        images: itemWithImages.product.images,
+                        picture: itemWithImages.product.picture
+                      })
+                      onImageClick?.(itemWithImages)
+                    }}
+                  >
+                    <ProductImage
+                      src={item.product.images?.find(img => img.isMain)?.url || item.product.picture || null}
+                      alt={item.product.description}
+                    />
+                  </div>
+                </TableCell>
+                {visibleColumns.filter(col => col.key !== 'picture').map(col => (
                   <TableCell key={col.key}>
                     {renderCell(col.key, item, index)}
                   </TableCell>

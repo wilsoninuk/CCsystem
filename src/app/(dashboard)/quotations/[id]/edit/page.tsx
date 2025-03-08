@@ -10,21 +10,24 @@ interface PageProps {
 
 export default async function EditQuotationPage({ params }: { params: { id: string } }) {
   const quotation = await prisma.quotation.findUnique({
-    where: { id: params.id },
+    where: {
+      id: params.id
+    },
     include: {
       customer: true,
+      user: true,
       items: {
         include: {
           product: {
             include: {
-              images: {
-                where: { isMain: true }
-              }
+              images: true
             }
           }
-        },
+        }
+      },
+      revisions: {
         orderBy: {
-          serialNo: 'asc'
+          createdAt: 'desc'
         }
       }
     }
@@ -60,6 +63,13 @@ export default async function EditQuotationPage({ params }: { params: { id: stri
       customerId: quotation.customerId
     }
     
+    // 添加日志查看图片数据
+    console.log('处理商品的图片数据:', {
+      productId: item.productId,
+      imagesCount: item.product.images?.length,
+      images: item.product.images
+    })
+
     return {
       id: item.id,
       quotationId: quotation.id,
@@ -72,8 +82,9 @@ export default async function EditQuotationPage({ params }: { params: { id: stri
         supplier: {
           name: item.product.supplier || ''
         },
-        picture: item.product.images[0]?.url || null,
-        barcode: item.product.barcode || ''
+        picture: item.product.images?.[0]?.url || null,
+        barcode: item.product.barcode || '',
+        images: Array.isArray(item.product.images) ? item.product.images : []  // 确保包含完整的图片数组
       },
       barcode: item.barcode,
       quantity: item.quantity,

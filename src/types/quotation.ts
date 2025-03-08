@@ -1,4 +1,4 @@
-import type { Product } from "@prisma/client"
+import type { Product, ProductImage } from "@prisma/client"
 import { HistoryPrice } from "@/lib/services/price-history"
 
 export interface QuotationItem {
@@ -29,6 +29,12 @@ export interface QuotationItem {
     supplier: {
       name: string
     }
+    images?: Array<{
+      id: string
+      url: string
+      isMain: boolean
+      order: number
+    }>
   }
   color?: 'blue' | 'purple' | 'pink' | null
   historyPrice?: HistoryPrice

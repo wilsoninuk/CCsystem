@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma"
 
+export type HistoryPriceStatus = 'COMPLETED' | 'SHIPPED' | 'PI_GENERATED' | 'CI_GENERATED'
+
 export interface HistoryPrice {
   price: number | null
   date: Date | null
-  status: 'SHIPPED' | null
+  status: HistoryPriceStatus | null
   customerId: string
 }
 

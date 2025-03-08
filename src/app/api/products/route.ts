@@ -6,20 +6,45 @@ import { NextResponse } from "next/server"
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search')
+    const category = searchParams.get('category')
+    const supplier = searchParams.get('supplier')
     
     const products = await prisma.product.findMany({
       where: {
-        isActive: true  // 只返回激活的商品
+        isActive: true,
+        ...(search && {
+          OR: [
+            { itemNo: { contains: search, mode: 'insensitive' } },
+            { barcode: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } }
+          ]
+        }),
+        ...(category && category !== 'all' && {
+          category: category
+        }),
+        ...(supplier && supplier !== 'all' && {
+          supplier: supplier
+        })
       },
       include: {
-        images: true,  // 始终包含图片数据
-        creator: false,
-        updater: false,
+        images: {
+          orderBy: {
+            order: 'asc'
+          }
+        }
       },
       orderBy: {
         updatedAt: 'desc'
       }
     })
+
+    // 添加日志以检查图片数据
+    console.log('API - 返回的产品数据:', products.map(product => ({
+      id: product.id,
+      imagesCount: product.images.length,
+      hasMainImage: product.images.some(img => img.isMain)
+    })))
 
     return NextResponse.json(products)
   } catch (error) {

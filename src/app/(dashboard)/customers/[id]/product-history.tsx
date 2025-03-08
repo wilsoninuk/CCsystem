@@ -26,6 +26,12 @@ import { ProductImage } from "@/components/ui/image"
 import { ImageGallery } from "@/app/(dashboard)/products/components/image-gallery"
 import type { CustomerProductHistory, Product, ProductImage as ProductImageType } from "@prisma/client"
 import Link from "next/link"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface ExtendedProduct extends Product {
   images: ProductImageType[]
@@ -253,10 +259,20 @@ export function ProductHistory({ history }: ProductHistoryProps) {
       </div>
 
       {selectedProduct && (
-        <ImageGallery
-          product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
-        />
+        <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>商品图片</DialogTitle>
+            </DialogHeader>
+            <ImageGallery
+              mainImage={selectedProduct.images.find(img => img.isMain)?.url || null}
+              additionalImages={selectedProduct.images.filter(img => !img.isMain).map(img => img.url)}
+              onMainImageChange={async () => {}}
+              onAdditionalImagesChange={async () => {}}
+              disabled={true}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

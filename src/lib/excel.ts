@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs'
 import { Product } from '@prisma/client'
 import { saveAs } from 'file-saver'
-import { QuotationItem } from '@prisma/client'
+import { QuotationItem } from '@/types/quotation'
 
 // 定义 Excel 列的映射关系
 const EXCEL_HEADERS = {
@@ -90,6 +90,13 @@ interface ExportData {
   }[]
 }
 
+interface ExportOptions {
+  includeCost: boolean
+  includeProfit: boolean
+  includeUSD: boolean
+  includeRMB: boolean
+}
+
 // 添加图片处理的辅助函数
 async function getImageBuffer(imageUrl: string): Promise<Buffer> {
   // 使用我们的图片代理 API
@@ -102,7 +109,7 @@ async function getImageBuffer(imageUrl: string): Promise<Buffer> {
 }
 
 // 修改函数定义，添加可选的配置参数
-export async function exportToExcel(options: ExcelOptions): Promise<void> {
+export async function exportToExcel(items: QuotationItem[], options: ExportOptions) {
   // ... 实现导出逻辑 ...
 }
 

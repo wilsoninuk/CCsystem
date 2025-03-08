@@ -14,6 +14,13 @@ import { QuotationItem as QuotationItemType } from "@/types/quotation"  // 使�
 import { ProductSelectorDialog } from "@/components/quotations/product-selector-dialog"
 import { getProductsHistoryPrices } from "@/lib/services/price-history"
 import { Switch } from "@/components/ui/switch"
+import { ImageGallery } from "@/app/(dashboard)/products/components/image-gallery"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface NewQuotationFormProps {
   customers: Pick<Customer, "id" | "code" | "name" | "exchangeRate">[]
@@ -21,10 +28,11 @@ interface NewQuotationFormProps {
 
 export function NewQuotationForm({ customers }: NewQuotationFormProps) {
   const router = useRouter()
-  const [customerId, setCustomerId] = useState("")
-  const [exchangeRate, setExchangeRate] = useState(7.2)
+  const [customerId, setCustomerId] = useState<string>("")
+  const [exchangeRate, setExchangeRate] = useState<number>(7.2)
   const [items, setItems] = useState<QuotationItemType[]>([])
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<QuotationItemType | null>(null)
   const [isManualNumber, setIsManualNumber] = useState(false)
   const [manualNumber, setManualNumber] = useState('')
 
@@ -80,7 +88,7 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
     }
   }
 
-  const handleProductsSelected = async (products: Array<{ product: Product; quantity: number }>) => {
+  const handleProductsSelected = async (products: Array<{ product: Product & { images?: ProductImage[] }; quantity: number }>) => {
     // 获取所有产品的历史价格
     const productIds = products.map(p => p.product.id)
     const historyPrices = customerId ? 
@@ -114,13 +122,23 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
         cost: product.cost || 0,
         supplier: {
           name: product.supplier
-        }
+        },
+        images: product.images || []  // 确保包含完整的图片数组
       },
       color: null,
       historyPrice: historyPrices.get(product.id) || null
     }))
 
     setItems(prev => [...prev, ...newItems])
+  }
+
+  const handleImageClick = (item: QuotationItemType) => {
+    console.log('点击图片时的商品数据:', {
+      productId: item.productId,
+      images: item.product.images,
+      picture: item.product.picture
+    })
+    setSelectedProduct(item)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -262,7 +280,29 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
           items={items}
           exchangeRate={exchangeRate}
           onItemsChangeAction={setItems}
+          onImageClick={handleImageClick}
         />
+
+        {/* 图片查看对话框 */}
+        {selectedProduct && (
+          <Dialog 
+            open={!!selectedProduct} 
+            onOpenChange={(open) => !open && setSelectedProduct(null)}
+          >
+            <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>商品图片</DialogTitle>
+              </DialogHeader>
+              <ImageGallery
+                mainImage={selectedProduct.product.images?.find(img => img.isMain)?.url || selectedProduct.product.picture || null}
+                additionalImages={selectedProduct.product.images?.filter(img => !img.isMain)?.map(img => img.url) || []}
+                onMainImageChange={async () => {}}
+                onAdditionalImagesChange={async () => {}}
+                disabled={true}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </form>
   )
