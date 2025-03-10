@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { ImageUpload } from "./components/image-upload"
 import { useRouter } from "next/navigation"
-import { Download, Edit } from "lucide-react"
+import { Download, Edit, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { EditProductForm } from "./components/edit-product-form"
 import { useState } from "react"
@@ -16,6 +16,11 @@ import { DataTableColumnHeader } from "@/components/ui/data-table-column-header"
 import { Badge } from "@/components/ui/badge"
 import { zhCN } from "date-fns/locale"
 import { ProductDetailDialog } from "./components/product-detail-dialog"
+
+// 定义表格元数据类型
+interface TableMeta {
+  onToggleActive?: (id: string, currentStatus: boolean) => void
+}
 
 // 定义可选列配置类型
 interface OptionalColumn {
@@ -55,7 +60,7 @@ type ProductWithRelations = Product & {
 }
 
 // 列定义
-export const columns: ColumnDef<ProductWithRelations>[] = [
+export const columns: ColumnDef<ProductWithRelations, any>[] = [
   {
     id: "select",
     header: ({ table }) => (
@@ -190,7 +195,7 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
     }
   },
   {
-    accessorKey: "createdBy",
+    accessorKey: "creator",
     header: "创建者",
     cell: ({ row }) => {
       const creator = row.original.creator
@@ -214,7 +219,7 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
     cell: ({ row }) => format(new Date(row.original.createdAt), 'yyyy-MM-dd HH:mm')
   },
   {
-    accessorKey: "updatedBy",
+    accessorKey: "updater",
     header: "最后修改者",
     cell: ({ row }) => {
       const updater = row.original.updater
@@ -254,31 +259,71 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
   {
     id: "actions",
     cell: ({ row, table }) => {
-      const product = row.original
       const [editOpen, setEditOpen] = useState(false)
+      const product = row.original
+      const isDeleted = new Date(product.updatedAt).getTime() === new Date('2000-01-01').getTime()
+      const onToggleActive = table.options.meta?.onToggleActive as (id: string, currentStatus: boolean) => void
+
+      const handleRestore = async () => {
+        try {
+          const response = await fetch('/api/products/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [product.id] })
+          })
+
+          const result = await response.json()
+          
+          if (!response.ok) {
+            throw new Error(result.error || '恢复失败')
+          }
+
+          toast.success('商品已恢复')
+          window.location.reload()
+        } catch (error) {
+          console.error('恢复失败:', error)
+          toast.error(error instanceof Error ? error.message : '恢复失败')
+        }
+      }
 
       return (
         <div className="flex justify-end gap-2">
-          <Button
-            variant={product.isActive ? "destructive" : "default"}
-            size="sm"
-            onClick={() => table.options.meta?.onToggleActive?.(product.id, product.isActive)}
-            className={product.isActive ? "hover:bg-red-600" : "hover:bg-green-600"}
-          >
-            {product.isActive ? "下线" : "上线"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setEditOpen(true)}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
+          {isDeleted ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRestore}
+              title="恢复商品"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setEditOpen(true)}
+                title="编辑商品"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onToggleActive?.(product.id, product.isActive)}
+                title={product.isActive ? "下线商品" : "上线商品"}
+              >
+                {product.isActive ? "下线" : "上线"}
+              </Button>
+            </>
+          )}
+          
           <EditProductForm
             product={product}
             open={editOpen}
             onOpenChange={setEditOpen}
             onSuccess={() => {
+              setEditOpen(false)
               window.location.reload()
             }}
           />

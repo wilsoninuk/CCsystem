@@ -24,32 +24,31 @@ import {
   FormDescription
 } from "@/components/ui/form"
 import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 
-// 定义表单验证schema
+// 图片相关的schema
+const imageSchema = z.object({
+  imageFormat: z.enum(["jpg", "png"]).default("jpg"),
+  picture: z.string().nullable(),
+  additionalPictures: z.array(z.string().nullable()).default([])
+})
+
+// 商品表单验证规则
 const productSchema = z.object({
-  // 基本信息 - 必填
   itemNo: z.string().min(1, "商品编号不能为空"),
   barcode: z.string().min(1, "条形码不能为空"),
   description: z.string().min(1, "商品描述不能为空"),
-  cost: z.string().min(1, "成本不能为空").regex(/^\d+(\.\d{1,2})?$/, "请输入有效的金额"),
-  
-  // 基本信息 - 选填
-  category: z.string().optional(),
-  supplier: z.string().optional(),
-  
-  // 商品特征 - 选填
-  color: z.string().optional(),
-  material: z.string().optional(),
-  productSize: z.string().optional(),
-  moq: z.string().regex(/^\d*$/, "请输入有效的数字").optional(),
-  
-  // 包装信息 - 选填
-  cartonSize: z.string().optional(),
-  cartonWeight: z.string().regex(/^\d+(\.\d{1,2})?$/, "请输入有效的重量").optional(),
-  
-  // 其他信息 - 选填
-  link1688: z.string().url("请输入有效的URL").optional().or(z.literal("")),
-  picture: z.string().optional(),
+  category: z.string().nullable(),
+  cost: z.number().min(0.01, "成本必须大于0"),
+  supplier: z.string().nullable(),
+  color: z.string().nullable(),
+  material: z.string().nullable(),
+  productSize: z.string().nullable(),
+  cartonSize: z.string().nullable(),
+  cartonWeight: z.number().nullable(),
+  moq: z.number().nullable(),
+  link1688: z.string().url("请输入有效的URL").nullable(),
+  ...imageSchema.shape
 })
 
 type ProductFormValues = z.infer<typeof productSchema>
@@ -73,36 +72,65 @@ export function CreateProductDialog({
       itemNo: "",
       barcode: "",
       description: "",
-      cost: "",
-      category: "",
-      supplier: "",
-      color: "",
-      material: "",
-      productSize: "",
-      moq: "",
-      cartonSize: "",
-      cartonWeight: "",
-      link1688: "",
-      picture: "",
-    },
+      category: null,
+      cost: 0,
+      supplier: null,
+      color: null,
+      material: null,
+      productSize: null,
+      cartonSize: null,
+      cartonWeight: null,
+      moq: null,
+      link1688: null,
+      imageFormat: "jpg",
+      picture: null,
+      additionalPictures: [null, null, null, null]
+    }
   })
 
-  const onSubmit = async (data: ProductFormValues) => {
+  const generateImageUrl = (barcode: string, index?: number) => {
+    const format = form.getValues("imageFormat")
+    const baseUrl = "https://res.cloudinary.com/duiecmcry/image/upload/v1/products/"
+    
+    if (typeof index === 'number') {
+      return `${baseUrl}${barcode}_${index + 1}.${format}`
+    }
+    return `${baseUrl}${barcode}.${format}`
+  }
+
+  const handleGenerateUrl = (index?: number) => {
+    const barcode = form.getValues("barcode")
+    if (!barcode) {
+      toast.error("请先输入条形码")
+      return
+    }
+
+    const url = generateImageUrl(barcode, index)
+    
+    if (typeof index === 'number') {
+      const currentAdditionalPictures = form.getValues("additionalPictures")
+      currentAdditionalPictures[index] = url
+      form.setValue("additionalPictures", currentAdditionalPictures)
+    } else {
+      form.setValue("picture", url)
+    }
+  }
+
+  const onSubmit = async (values: ProductFormValues) => {
     try {
       setIsLoading(true)
-      
-      // 转换数值类型
-      const formattedData = {
-        ...data,
-        cost: parseFloat(data.cost),
-        moq: data.moq ? parseInt(data.moq) : undefined,
-        cartonWeight: data.cartonWeight ? parseFloat(data.cartonWeight) : undefined,
-      }
-
       const response = await fetch("/api/products", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formattedData),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...values,
+          cost: parseFloat(values.cost.toString()),
+          moq: values.moq ? parseInt(values.moq.toString()) : null,
+          cartonWeight: values.cartonWeight ? parseFloat(values.cartonWeight.toString()) : null,
+          additionalPictures: values.additionalPictures.filter(url => url !== null)
+        }),
       })
 
       if (!response.ok) {
@@ -112,8 +140,8 @@ export function CreateProductDialog({
 
       toast.success("创建成功")
       form.reset()
-      onOpenChange(false)
       onSuccess?.()
+      onOpenChange(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "创建失败")
     } finally {
@@ -123,271 +151,206 @@ export function CreateProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="space-y-1">
-          <DialogTitle>新增商品</DialogTitle>
-          <DialogDescription>
-            请填写商品信息，带 * 的字段为必填项
-          </DialogDescription>
+      <DialogContent className="max-w-2xl h-[85vh] flex flex-col">
+        <DialogHeader className="flex-none px-6 py-4">
+          <DialogTitle>创建商品</DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              {/* 基本信息 */}
-              <div className="col-span-2 space-y-2">
-                <h3 className="font-semibold text-sm">基本信息</h3>
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-6">
+              {/* 基本信息部分 */}
+              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  {/* 商品编号 */}
-                  <FormField
-                    control={form.control}
-                    name="itemNo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">商品编号 *</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-8" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                  <div className="space-y-1">
+                    <Label htmlFor="itemNo">商品编号 <span className="text-red-500">*</span></Label>
+                    <Input {...form.register("itemNo")} />
+                    {form.formState.errors.itemNo && (
+                      <p className="text-xs text-red-500">{form.formState.errors.itemNo.message}</p>
                     )}
-                  />
+                  </div>
 
-                  {/* 条形码 */}
-                  <FormField
-                    control={form.control}
-                    name="barcode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">条形码 *</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-8" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                  <div className="space-y-1">
+                    <Label htmlFor="barcode">条形码 <span className="text-red-500">*</span></Label>
+                    <Input {...form.register("barcode")} />
+                    {form.formState.errors.barcode && (
+                      <p className="text-xs text-red-500">{form.formState.errors.barcode.message}</p>
                     )}
-                  />
+                  </div>
+                </div>
 
-                  {/* 商品描述 */}
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem className="col-span-2">
-                        <FormLabel className="text-xs">商品描述 *</FormLabel>
-                        <FormControl>
-                          <Textarea {...field} className="min-h-[40px] h-[40px] resize-none" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* 成本和类别 */}
-                  <FormField
-                    control={form.control}
-                    name="cost"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">成本 *</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="number" step="0.01" className="h-8" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">类别</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-8" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* 供应商 */}
-                  <FormField
-                    control={form.control}
-                    name="supplier"
-                    render={({ field }) => (
-                      <FormItem className="col-span-2">
-                        <FormLabel className="text-xs">供应商</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-8" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="space-y-1">
+                  <Label htmlFor="description">商品描述 <span className="text-red-500">*</span></Label>
+                  <Input {...form.register("description")} />
+                  {form.formState.errors.description && (
+                    <p className="text-xs text-red-500">{form.formState.errors.description.message}</p>
+                  )}
                 </div>
               </div>
 
-              {/* 商品特征和包装信息 */}
-              <div className="col-span-2 grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-sm">商品特征</h3>
-                  <div className="space-y-3">
-                    {/* 颜色 */}
-                    <FormField
-                      control={form.control}
-                      name="color"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">颜色</FormLabel>
-                          <FormControl>
-                            <Input {...field} className="h-8" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+              {/* 图片部分 */}
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <Label>图片格式</Label>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="jpg"
+                        {...form.register("imageFormat")}
+                        defaultChecked
+                      />
+                      <span>JPG</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        value="png"
+                        {...form.register("imageFormat")}
+                      />
+                      <span>PNG</span>
+                    </label>
+                  </div>
+                </div>
 
-                    {/* 材质 */}
-                    <FormField
-                      control={form.control}
-                      name="material"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">材质</FormLabel>
-                          <FormControl>
-                            <Input {...field} className="h-8" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                <div className="space-y-1">
+                  <Label>主图</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      {...form.register("picture")}
+                      placeholder={`示例: https://res.cloudinary.com/duiecmcry/image/upload/v1/products/6991234567890.${form.getValues("imageFormat")}`}
                     />
-
-                    {/* 商品尺寸 */}
-                    <FormField
-                      control={form.control}
-                      name="productSize"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">商品尺寸</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="例如: 10x20x30cm" className="h-8" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* 最小订购量 */}
-                    <FormField
-                      control={form.control}
-                      name="moq"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">最小订购量</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" className="h-8" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleGenerateUrl()}
+                    >
+                      生成URL
+                    </Button>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-semibold text-sm">包装信息</h3>
-                  <div className="space-y-3">
-                    {/* 箱规 */}
-                    <FormField
-                      control={form.control}
-                      name="cartonSize"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">箱规</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="例如: 60x40x20cm" className="h-8" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* 箱重 */}
-                    <FormField
-                      control={form.control}
-                      name="cartonWeight"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">箱重(kg)</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="number" step="0.01" className="h-8" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <Label>附图（最多4张）</Label>
+                  <div className="space-y-2">
+                    {[0, 1, 2, 3].map((index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input
+                          {...form.register(`additionalPictures.${index}`)}
+                          placeholder={`示例: https://res.cloudinary.com/duiecmcry/image/upload/v1/products/6991234567890_${index + 1}.${form.getValues("imageFormat")}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleGenerateUrl(index)}
+                        >
+                          生成URL
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              {/* 其他信息 */}
-              <div className="col-span-2 space-y-2">
-                <h3 className="font-semibold text-sm">其他信息</h3>
-                <div className="space-y-3">
-                  {/* 1688链接 */}
-                  <FormField
-                    control={form.control}
-                    name="link1688"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">1688链接</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="url" className="h-8" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              {/* 其他信息部分 */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="category">类别</Label>
+                    <Input {...form.register("category")} />
+                  </div>
 
-                  {/* 商品图片 */}
-                  <FormField
-                    control={form.control}
-                    name="picture"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">商品图片</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="url" placeholder="请输入图片URL" className="h-8" />
-                        </FormControl>
-                        <FormDescription className="text-xs">
-                          目前支持图片URL,后续将支持文件上传
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
+                  <div className="space-y-1">
+                    <Label htmlFor="cost">成本 <span className="text-red-500">*</span></Label>
+                    <Input 
+                      {...form.register("cost", { valueAsNumber: true })}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                    />
+                    {form.formState.errors.cost && (
+                      <p className="text-xs text-red-500">{form.formState.errors.cost.message}</p>
                     )}
-                  />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="supplier">供应商</Label>
+                    <Input {...form.register("supplier")} />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="color">颜色/款式</Label>
+                    <Input {...form.register("color")} />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="material">材料</Label>
+                    <Input {...form.register("material")} />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="productSize">产品尺寸</Label>
+                    <Input 
+                      {...form.register("productSize")}
+                      placeholder="例：10x20x30cm"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="cartonSize">装箱尺寸</Label>
+                    <Input 
+                      {...form.register("cartonSize")}
+                      placeholder="例：30x40x50cm"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="cartonWeight">装箱重量(kg)</Label>
+                    <Input 
+                      {...form.register("cartonWeight", { valueAsNumber: true })}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="moq">MOQ</Label>
+                    <Input 
+                      {...form.register("moq", { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                    />
+                  </div>
+
+                  <div className="col-span-2 space-y-1">
+                    <Label htmlFor="link1688">1688链接</Label>
+                    <Input 
+                      {...form.register("link1688")}
+                      type="url"
+                      placeholder="https://detail.1688.com/..."
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            </form>
+          </div>
+        </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-8">
-                取消
-              </Button>
-              <Button type="submit" disabled={isLoading} className="h-8">
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    保存中...
-                  </>
-                ) : (
-                  "保存"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+        <div className="flex-none px-6 py-4 border-t">
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              type="button"
+            >
+              取消
+            </Button>
+            <Button onClick={form.handleSubmit(onSubmit)} disabled={isLoading}>
+              {isLoading ? "创建中..." : "确定"}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )

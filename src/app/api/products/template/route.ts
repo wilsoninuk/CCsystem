@@ -20,12 +20,7 @@ export async function GET() {
       { header: '箱规', key: 'cartonSize', width: 15 },
       { header: '箱重', key: 'cartonWeight', width: 10 },
       { header: '最小订量', key: 'moq', width: 10 },
-      { header: '1688链接', key: 'link1688', width: 30 },
-      { header: '主图URL', key: 'mainImage', width: 30 },
-      { header: '附图URL1', key: 'image1', width: 30 },
-      { header: '附图URL2', key: 'image2', width: 30 },
-      { header: '附图URL3', key: 'image3', width: 30 },
-      { header: '附图URL4', key: 'image4', width: 30 }
+      { header: '1688链接', key: 'link1688', width: 50 }
     ]
 
     // 设置标题行样式
@@ -50,22 +45,8 @@ export async function GET() {
       cartonSize: '100x200x300cm',
       cartonWeight: 5.5,
       moq: 1000,
-      link1688: 'https://detail.1688.com/xxx',
-      mainImage: 'https://example.com/main.jpg',
-      image1: 'https://example.com/1.jpg',
-      image2: 'https://example.com/2.jpg',
-      image3: 'https://example.com/3.jpg',
-      image4: 'https://example.com/4.jpg'
+      link1688: 'https://detail.1688.com/xxx'
     })
-
-    // 添加说明行
-    worksheet.addRow([])
-    worksheet.addRow(['注意事项：'])
-    worksheet.addRow(['1. 标记*的字段为必填项'])
-    worksheet.addRow(['2. 条形码必须填写且不能重复，建议使用标准13位数字条形码'])
-    worksheet.addRow(['3. 图片URL需要是可以直接访问的完整链接'])
-    worksheet.addRow(['4. 每个产品最多支持1张主图和4张附图'])
-    worksheet.addRow(['5. 数字字段（成本、箱重、最小订量）请填写数字，不要包含单位'])
 
     // 生成 Excel 文件
     const buffer = await workbook.xlsx.writeBuffer()

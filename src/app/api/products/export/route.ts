@@ -2,18 +2,20 @@ import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
 import ExcelJS from 'exceljs'
 import axios from 'axios'
-import { headers } from 'next/headers'
 
-export async function GET() {
+export async function POST(request: Request) {
   try {
-    // 获取当前请求的host，用于构建完整的图片URL
-    const headersList = headers()
-    const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https'
-    const host = headersList.get('host') || ''
-    const baseUrl = `${protocol}://${host}`
+    // 获取请求中的商品ID列表
+    const { ids } = await request.json()
 
-    // 获取所有产品及其图片
+    // 根据是否提供ID列表来查询商品，并且排除已删除的商品
     const products = await prisma.product.findMany({
+      where: {
+        ...(ids?.length > 0 ? { id: { in: ids } } : {}),
+        updatedAt: {
+          gt: new Date('2000-01-01') // 排除已删除的商品
+        }
+      },
       include: {
         images: true,
         creator: {
@@ -91,7 +93,7 @@ export async function GET() {
         if (url.startsWith('http://') || url.startsWith('https://')) {
           return url
         }
-        return `${baseUrl}${url}`
+        return `${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://${process.env.NEXT_PUBLIC_HOST}${url}`
       }
 
       // 处理主图

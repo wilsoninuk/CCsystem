@@ -4,6 +4,11 @@ import { ColumnDef } from "@tanstack/react-table"
 import { format } from "date-fns"
 import { Product, ProductImage, User } from "@prisma/client"
 import Image from "next/image"
+import { useState } from "react"
+import { ProductDetailDialog } from "./product-detail-dialog"
+import { Edit } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { EditProductForm } from "./edit-product-form"
 
 // 扩展 Product 类型以包含关联字段
 type ProductWithRelations = Product & {
@@ -14,23 +19,41 @@ type ProductWithRelations = Product & {
 
 export const columns: ColumnDef<ProductWithRelations>[] = [
   {
-    accessorKey: "images",
-    header: "图片",
+    id: "mainImage",
+    header: "主图",
     cell: ({ row }) => {
-      const mainImage = row.original.images?.find(img => img.isMain)
-      return mainImage ? (
-        <div className="relative w-10 h-10">
-          <Image
-            src={mainImage.url}
-            alt={row.original.description}
-            fill
-            className="object-cover rounded-sm"
+      const [detailOpen, setDetailOpen] = useState(false)
+      const mainImage = row.original.images?.find(img => img.isMain)?.url || row.original.picture
+      
+      return (
+        <>
+          <div 
+            className="relative w-16 h-16 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setDetailOpen(true)}
+          >
+            {mainImage ? (
+              <img
+                src={mainImage}
+                alt={row.original.description}
+                className="object-cover w-full h-full rounded"
+              />
+            ) : (
+              <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                无图片
+              </div>
+            )}
+          </div>
+
+          <ProductDetailDialog
+            product={row.original}
+            open={detailOpen}
+            onOpenChange={setDetailOpen}
+            onSuccess={() => {
+              setDetailOpen(false)
+              window.location.reload()
+            }}
           />
-        </div>
-      ) : (
-        <div className="w-10 h-10 bg-gray-100 rounded-sm flex items-center justify-center text-gray-400 text-xs">
-          无图片
-        </div>
+        </>
       )
     }
   },
@@ -108,5 +131,33 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
     accessorKey: "supplier",
     header: "供应商",
     cell: ({ row }) => row.original.supplier || '-'
+  },
+  {
+    id: "actions",
+    cell: ({ row }) => {
+      const [editOpen, setEditOpen] = useState(false)
+      const product = row.original
+
+      return (
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setEditOpen(true)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <EditProductForm
+            product={product}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            onSuccess={() => {
+              setEditOpen(false)
+              window.location.reload()
+            }}
+          />
+        </div>
+      )
+    }
   }
 ] 

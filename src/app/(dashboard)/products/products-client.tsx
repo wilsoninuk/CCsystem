@@ -6,13 +6,15 @@ import { columns } from "./columns"
 import { Product, User, ProductImage } from "@prisma/client"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Plus, Download, Upload, Settings, Loader2, Trash2 } from "lucide-react"
+import { Plus, Download, Upload, Settings, Loader2, Trash2, Undo2 } from "lucide-react"
 import { ColumnVisibility, ColumnVisibilityProvider, ColumnVisibilityContext } from "./column-visibility"
 import { toast } from "sonner"
 import { ImportDialog } from "@/app/(dashboard)/products/components/import-dialog"
 import { useRouter } from "next/navigation"
 import { CreateProductDialog } from "./components/create-product-dialog"
 import { ColumnSelectDialog } from "./components/column-select-dialog"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 
 console.log('ImportDialog imported:', ImportDialog)
 
@@ -52,6 +54,7 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
   const [isLoading, setIsLoading] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [columnSelectOpen, setColumnSelectOpen] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
 
   // 获取所有供应商（去重并过滤掉 null）
   const suppliers = Array.from(new Set(products.map(p => p.supplier).filter((s): s is string => s !== null)))
@@ -157,7 +160,13 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
   const handleExport = async () => {
     try {
       const response = await fetch('/api/products/export', {
-        method: 'GET'
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          ids: selectedRows.length > 0 ? selectedRows : undefined 
+        })
       })
 
       if (!response.ok) {
@@ -212,7 +221,8 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
       console.log('导入响应:', result)
 
       if (!response.ok) {
-        if (response.status === 409) {
+        // 处理特定的错误情况
+        if (response.status === 409 && result.duplicates) {
           // 显示重复商品的详细信息
           const duplicateInfo = result.duplicates.map((d: DuplicateProduct) => 
             `条形码: ${d.barcode}\n` +
@@ -235,7 +245,6 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
             console.log('更新响应:', updateResult)
 
             if (!updateResponse.ok) {
-              console.error('更新失败:', updateResult)
               throw new Error(updateResult.error || '更新失败')
             }
 
@@ -243,35 +252,27 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
             await refreshProducts()
             return
           }
-          return
+          return // 用户取消更新
         }
 
-        console.error('导入失败:', result)
-        
-        // 显示详细的错误信息
-        if (result.details && Array.isArray(result.details)) {
-          const errorDetails = result.details
-            .map((error: any) => `第 ${error.row} 行: ${error.error}`)
-            .join('\n')
-          throw new Error(`导入失败:\n${errorDetails}`)
-        }
-        
+        // 处理其他错误
         throw new Error(result.error || '导入失败')
       }
 
-      toast.success(`成功导入${result.created}个商品`)
+      // 导入成功
+      toast.success(`成功导入${result.created}个商品${result.updated ? `，更新${result.updated}个商品` : ''}`)
       await refreshProducts()
+      setImportDialogOpen(false)
     } catch (error) {
-      console.error('导入错误:', error)
+      console.error('导入失败:', error)
       toast.error(error instanceof Error ? error.message : '导入失败')
-      throw error // 重新抛出错误，让ImportDialog组件知道导入失败
     }
   }
 
   // 刷新商品列表
   const refreshProducts = async () => {
     try {
-      const response = await fetch('/api/products?include=images,creator,updater')
+      const response = await fetch(`/api/products?showDeleted=${showDeleted}`)
       if (!response.ok) throw new Error('获取商品列表失败')
       const data = await response.json()
       setProducts(data)
@@ -311,6 +312,43 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
       toast.error(error instanceof Error ? error.message : '更新状态失败')
     }
   }
+
+  // 添加恢复商品的处理函数
+  const handleRestore = async () => {
+    if (selectedRows.length === 0) {
+      toast.warning('请先选择要恢复的商品')
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/products/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedRows })
+      })
+
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.error || '恢复失败')
+      }
+
+      toast.success(`成功恢复 ${result.count} 个商品`)
+      setSelectedRows([])
+      refreshProducts()
+    } catch (error) {
+      console.error('恢复失败:', error)
+      toast.error(error instanceof Error ? error.message : '恢复失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 监听 showDeleted 变化时刷新商品列表
+  useEffect(() => {
+    refreshProducts()
+  }, [showDeleted])
 
   console.log('importDialogOpen state:', importDialogOpen)
 
@@ -360,39 +398,74 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
             </Select>
           </div>
 
-          {/* 工具按钮 */}
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />新增
-          </Button>
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="mr-2 h-4 w-4" />
-            {selectedRows.length > 0 ? `导出选中(${selectedRows.length})` : '导出全部'}
-          </Button>
-          <div className="relative">
-            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-              <Upload className="mr-2 h-4 w-4" />导入
-            </Button>
+          {/* 添加显示已删除商品的开关 */}
+          <div className="flex items-center space-x-2">
+            <Switch
+              checked={showDeleted}
+              onCheckedChange={setShowDeleted}
+              id="show-deleted"
+            />
+            <Label htmlFor="show-deleted">显示已删除商品</Label>
           </div>
-          <Button variant="outline" onClick={() => setColumnSelectOpen(true)}>
-            <Settings className="mr-2 h-4 w-4" />
-            自定义列
-          </Button>
 
-          {selectedRows.length > 0 && (
+          {/* 工具按钮 */}
+          {!showDeleted && (
+            <>
+              <Button onClick={() => setCreateDialogOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />新增
+              </Button>
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" />
+                {selectedRows.length > 0 ? `导出选中(${selectedRows.length})` : '导出全部'}
+              </Button>
+              <div className="relative">
+                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />导入
+                </Button>
+              </div>
+              <Button variant="outline" onClick={() => setColumnSelectOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                自定义列
+              </Button>
+
+              {selectedRows.length > 0 && (
+                <Button 
+                  variant="destructive" 
+                  onClick={handleBatchDelete}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      删除中...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      删除选中 ({selectedRows.length})
+                    </>
+                  )}
+                </Button>
+              )}
+            </>
+          )}
+
+          {/* 添加恢复按钮（仅在显示已删除商品时显示） */}
+          {showDeleted && selectedRows.length > 0 && (
             <Button 
-              variant="destructive" 
-              onClick={handleBatchDelete}
+              variant="outline" 
+              onClick={handleRestore}
               disabled={isLoading}
             >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  删除中...
+                  恢复中...
                 </>
               ) : (
                 <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  删除选中 ({selectedRows.length})
+                  <Undo2 className="mr-2 h-4 w-4" />
+                  恢复选中 ({selectedRows.length})
                 </>
               )}
             </Button>

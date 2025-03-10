@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { ImageUpload } from "./image-upload"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter } from "next/navigation"
 
@@ -46,37 +45,6 @@ export function ProductDetailDialog({
 
   const [images, setImages] = useState<ProductImage[]>(product.images || [])
 
-  const handleImageUpload = async (imageUrl: string, isMain: boolean) => {
-    try {
-      const response = await fetch(`/api/products/${product.id}/images`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: imageUrl, isMain })
-      })
-
-      if (!response.ok) {
-        throw new Error('上传图片失败')
-      }
-
-      const newImage = await response.json()
-      
-      // 如果是主图，将其他图片设置为非主图
-      if (isMain) {
-        setImages(prev => prev.map(img => ({
-          ...img,
-          isMain: false
-        })).concat([newImage]))
-      } else {
-        setImages(prev => [...prev, newImage])
-      }
-
-      toast.success('图片上传成功')
-    } catch (error) {
-      console.error('上传图片失败:', error)
-      toast.error('上传图片失败')
-    }
-  }
-
   const handleImageDelete = async (imageId: string) => {
     try {
       const response = await fetch(`/api/products/${product.id}/images/${imageId}`, {
@@ -93,29 +61,6 @@ export function ProductDetailDialog({
     } catch (error) {
       console.error('删除图片失败:', error)
       toast.error(error instanceof Error ? error.message : '删除图片失败')
-    }
-  }
-
-  const handleSetMainImage = async (imageId: string) => {
-    try {
-      const response = await fetch(`/api/products/${product.id}/images/${imageId}`, {
-        method: 'PUT'
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '设置主图失败')
-      }
-
-      setImages(prev => prev.map(img => ({
-        ...img,
-        isMain: img.id === imageId
-      })))
-
-      toast.success('设置主图成功')
-    } catch (error) {
-      console.error('设置主图失败:', error)
-      toast.error(error instanceof Error ? error.message : '设置主图失败')
     }
   }
 
@@ -179,10 +124,6 @@ export function ProductDetailDialog({
                       </Button>
                     </div>
                   ))}
-                  <ImageUpload
-                    onUpload={(url) => handleImageUpload(url, true)}
-                    text="上传主图"
-                  />
                 </div>
               </div>
 
@@ -198,13 +139,6 @@ export function ProductDetailDialog({
                       />
                       <div className="absolute top-2 right-2 space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleSetMainImage(image.id)}
-                        >
-                          设为主图
-                        </Button>
-                        <Button
                           variant="destructive"
                           size="sm"
                           onClick={() => handleImageDelete(image.id)}
@@ -214,10 +148,6 @@ export function ProductDetailDialog({
                       </div>
                     </div>
                   ))}
-                  <ImageUpload
-                    onUpload={(url) => handleImageUpload(url, false)}
-                    text="上传附图"
-                  />
                 </div>
               </div>
             </div>

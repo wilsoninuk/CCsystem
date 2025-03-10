@@ -41,6 +41,7 @@ interface DataTableProps<TData> {
   data: TData[]
   searchKey: string
   onSelectedRowsChange?: (rows: TData[]) => void
+  onToggleActive?: (id: string, currentStatus: boolean) => void
 }
 
 export function DataTable<TData>({
@@ -48,6 +49,7 @@ export function DataTable<TData>({
   data,
   searchKey,
   onSelectedRowsChange,
+  onToggleActive,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
@@ -68,6 +70,9 @@ export function DataTable<TData>({
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     enableRowSelection: true,
+    meta: {
+      onToggleActive
+    }
   })
 
   // 当选择改变时通知父组件

@@ -3,14 +3,15 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "../../auth/[...nextauth]/route"
 
-// 用于标记删除状态的特殊日期
-const DELETED_DATE = new Date('2000-01-01')
-
-export async function DELETE(request: Request) {
+export async function POST(request: Request) {
   try {
+    // 验证用户会话
     const session = await getServerSession(authOptions)
     if (!session?.user?.email) {
-      return NextResponse.json({ error: "未授权" }, { status: 401 })
+      return NextResponse.json(
+        { error: "未授权访问" },
+        { status: 401 }
+      )
     }
 
     // 获取用户ID
@@ -34,15 +35,14 @@ export async function DELETE(request: Request) {
       )
     }
 
-    // 使用 updatedAt 标记删除状态
+    // 恢复商品
     const result = await prisma.product.updateMany({
       where: {
-        id: {
-          in: ids
-        }
+        id: { in: ids },
+        updatedAt: new Date('2000-01-01')
       },
       data: {
-        updatedAt: DELETED_DATE,
+        updatedAt: new Date(),
         updatedBy: user.id
       }
     })
@@ -52,9 +52,9 @@ export async function DELETE(request: Request) {
       count: result.count 
     })
   } catch (error) {
-    console.error('批量删除失败:', error)
+    console.error('恢复商品失败:', error)
     return NextResponse.json(
-      { error: `批量删除失败: ${error instanceof Error ? error.message : '未知错误'}` },
+      { error: "恢复商品失败" },
       { status: 500 }
     )
   }

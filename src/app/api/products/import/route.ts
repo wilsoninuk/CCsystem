@@ -1,17 +1,28 @@
 import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
-import { Product } from '@prisma/client'
 import ExcelJS from 'exceljs'
 import { getServerSession } from "next-auth"
 import { authOptions } from "../../auth/[...nextauth]/route"
+
+// 生成图片URL的函数
+function generateImageUrls(barcode: string) {
+  const baseUrl = "https://res.cloudinary.com/duiecmcry/image/upload/v1/products/"
+  return {
+    mainImage: `${baseUrl}${barcode}.jpg`,
+    additionalImages: [
+      `${baseUrl}${barcode}_1.jpg`,
+      `${baseUrl}${barcode}_2.jpg`,
+      `${baseUrl}${barcode}_3.jpg`,
+      `${baseUrl}${barcode}_4.jpg`
+    ]
+  }
+}
 
 interface ImportProduct {
   itemNo: string
   barcode: string
   description: string
   cost: number
-  mainImage: string | null
-  additionalImages: string[]
   category: string | null
   supplier: string | null
   color: string | null
@@ -42,7 +53,12 @@ export async function POST(request: Request) {
   try {
     // 1. 获取当前用户会话
     const session = await getServerSession(authOptions)
+    
+    // 添加详细的session检查日志
+    console.log('Current session:', session)
+    
     if (!session?.user?.email) {
+      console.error('Session validation failed:', { session })
       return NextResponse.json(
         { error: "未授权访问" },
         { status: 401 }
@@ -51,14 +67,121 @@ export async function POST(request: Request) {
 
     // 2. 获取用户ID
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { 
+        email: session.user.email
+      }
+    })
+
+    // 添加用户查询结果日志
+    console.log('User lookup result:', { 
+      email: session.user.email,
+      userFound: !!user,
+      isActive: user?.isActive
     })
 
     if (!user) {
+      console.error('User not found:', { 
+        email: session.user.email,
+        sessionData: session 
+      })
       return NextResponse.json(
         { error: "用户不存在" },
         { status: 401 }
       )
+    }
+
+    // 检查用户是否处于激活状态
+    if (!user.isActive) {
+      console.error('User is inactive:', {
+        email: session.user.email,
+        userId: user.id
+      })
+      return NextResponse.json(
+        { error: "用户账号已被禁用" },
+        { status: 401 }
+      )
+    }
+
+    // 创建新产品的函数
+    const createProduct = async (product: ImportProduct) => {
+      const { mainImage, additionalImages } = generateImageUrls(product.barcode)
+      
+      return await prisma.product.create({
+        data: {
+          itemNo: product.itemNo,
+          barcode: product.barcode,
+          description: product.description,
+          cost: product.cost,
+          category: product.category,
+          supplier: product.supplier,
+          color: product.color,
+          material: product.material,
+          productSize: product.productSize,
+          cartonSize: product.cartonSize,
+          cartonWeight: product.cartonWeight,
+          moq: product.moq,
+          link1688: product.link1688,
+          picture: mainImage,
+          isActive: true,
+          createdBy: user.id,
+          updatedBy: user.id,
+          images: {
+            create: [
+              {
+                url: mainImage,
+                isMain: true,
+                order: 0
+              },
+              ...additionalImages.map((url, index) => ({
+                url,
+                isMain: false,
+                order: index + 1
+              }))
+            ]
+          }
+        }
+      })
+    }
+
+    // 更新现有产品的函数
+    const updateProduct = async (existingProduct: any, newData: ImportProduct) => {
+      const { mainImage, additionalImages } = generateImageUrls(newData.barcode)
+      
+      return await prisma.product.update({
+        where: { id: existingProduct.id },
+        data: {
+          itemNo: newData.itemNo,
+          description: newData.description,
+          cost: newData.cost,
+          category: newData.category,
+          supplier: newData.supplier,
+          color: newData.color,
+          material: newData.material,
+          productSize: newData.productSize,
+          cartonSize: newData.cartonSize,
+          cartonWeight: newData.cartonWeight,
+          moq: newData.moq,
+          link1688: newData.link1688,
+          picture: mainImage,
+          isActive: true,
+          updatedBy: user.id,
+          images: {
+            deleteMany: {},
+            create: [
+              {
+                url: mainImage,
+                isMain: true,
+                order: 0
+              },
+              ...additionalImages.map((url, index) => ({
+                url,
+                isMain: false,
+                order: index + 1
+              }))
+            ]
+          }
+        }
+      })
     }
 
     const formData = await request.formData()
@@ -123,12 +246,7 @@ export async function POST(request: Request) {
       cartonSize: 'J',
       cartonWeight: 'K',
       moq: 'L',
-      link1688: 'M',
-      mainImage: 'N',
-      image1: 'O',
-      image2: 'P',
-      image3: 'Q',
-      image4: 'R'
+      link1688: 'M'
     }
 
     // 从第二行开始读取数据（跳过标题行）
@@ -161,21 +279,11 @@ export async function POST(request: Request) {
           return num
         }
 
-        // 收集所有附加图片
-        const additionalImages = [
-          getCellValue('image1'),
-          getCellValue('image2'),
-          getCellValue('image3'),
-          getCellValue('image4'),
-        ].filter(url => url && url.trim() !== '') as string[]
-
         const product: ImportProduct = {
           itemNo: getCellValue('itemNo') || '',
           barcode: getCellValue('barcode') || '',
           description: getCellValue('description') || '',
           cost: getNumberValue('cost') || 0,
-          mainImage: getCellValue('mainImage'),
-          additionalImages,
           category: getCellValue('category'),
           supplier: getCellValue('supplier'),
           color: getCellValue('color'),
@@ -225,21 +333,6 @@ export async function POST(request: Request) {
         // 验证成本
         if (product.cost <= 0) {
           throw new Error(`成本必须大于0，当前值: ${product.cost}`)
-        }
-
-        // 验证图片URL格式
-        const validateImageUrl = (url: string | null) => {
-          if (url && !url.match(/^https?:\/\/.+/)) {
-            throw new Error(`图片URL格式错误: ${url}`)
-          }
-        }
-
-        validateImageUrl(product.mainImage)
-        product.additionalImages.forEach(validateImageUrl)
-
-        // 验证图片数量
-        if (product.additionalImages.length > 4) {
-          throw new Error(`附加图片数量超过限制，最多允许4张，当前数量: ${product.additionalImages.length}`)
         }
 
         products.push(product)
@@ -334,48 +427,7 @@ export async function POST(request: Request) {
               })
 
               // 更新商品基本信息
-              await tx.product.update({
-                where: { id: existing.id },
-                data: {
-                  itemNo: newData.itemNo,
-                  description: newData.description,
-                  cost: newData.cost,
-                  category: newData.category,
-                  supplier: newData.supplier,
-                  color: newData.color,
-                  material: newData.material,
-                  productSize: newData.productSize,
-                  cartonSize: newData.cartonSize,
-                  cartonWeight: newData.cartonWeight,
-                  moq: newData.moq,
-                  link1688: newData.link1688,
-                  updatedBy: user.id
-                }
-              })
-
-              // 创建新的图片记录
-              if (newData.mainImage) {
-                await tx.productImage.create({
-                  data: {
-                    url: newData.mainImage,
-                    isMain: true,
-                    order: 0,
-                    productId: existing.id
-                  }
-                })
-              }
-
-              // 创建附加图片记录
-              for (let i = 0; i < newData.additionalImages.length; i++) {
-                await tx.productImage.create({
-                  data: {
-                    url: newData.additionalImages[i],
-                    isMain: false,
-                    order: i + 1,
-                    productId: existing.id
-                  }
-                })
-              }
+              await updateProduct(existing, newData)
 
               updatedCount++
             } catch (error) {
@@ -385,58 +437,14 @@ export async function POST(request: Request) {
           }
         }
 
-        // 添加新商品
-        const newProducts = products.filter(p => 
-          !existingProducts.some(e => e.barcode === p.barcode)
-        )
-
-        // 批量创建新商品
-        for (const product of newProducts) {
+        // 处理新商品 - 修复这里的逻辑
+        for (const product of products.filter(p => !existingProducts.some(e => e.barcode === p.barcode))) {
           try {
+            // 根据条形码生成图片URL
+            const { mainImage, additionalImages } = generateImageUrls(product.barcode)
+
             // 创建商品基本信息
-            const newProduct = await tx.product.create({
-              data: {
-                itemNo: product.itemNo,
-                barcode: product.barcode,
-                description: product.description,
-                cost: product.cost,
-                category: product.category,
-                supplier: product.supplier,
-                color: product.color,
-                material: product.material,
-                productSize: product.productSize,
-                cartonSize: product.cartonSize,
-                cartonWeight: product.cartonWeight,
-                moq: product.moq,
-                link1688: product.link1688,
-                createdBy: user.id,
-                updatedBy: user.id
-              }
-            })
-
-            // 创建主图记录
-            if (product.mainImage) {
-              await tx.productImage.create({
-                data: {
-                  url: product.mainImage,
-                  isMain: true,
-                  order: 0,
-                  productId: newProduct.id
-                }
-              })
-            }
-
-            // 创建附加图片记录
-            for (let i = 0; i < product.additionalImages.length; i++) {
-              await tx.productImage.create({
-                data: {
-                  url: product.additionalImages[i],
-                  isMain: false,
-                  order: i + 1,
-                  productId: newProduct.id
-                }
-              })
-            }
+            const newProduct = await createProduct(product)
 
             createdCount++
           } catch (error) {
