@@ -8,9 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { SyncHistoryButton } from "./sync-history-button"
 
 interface CustomerDetailsPageProps {
-  params: Promise<{
-    id: string
-  }> | {
+  params: {
     id: string
   }
 }
@@ -18,9 +16,8 @@ interface CustomerDetailsPageProps {
 export default async function CustomerDetailsPage({
   params,
 }: CustomerDetailsPageProps) {
-  // 确保 params 是已解析的
-  const resolvedParams = await Promise.resolve(params)
-  const customerId = resolvedParams.id
+  // 获取客户ID
+  const customerId = params.id
 
   // 确保 customerId 是有效的
   if (!customerId) {
