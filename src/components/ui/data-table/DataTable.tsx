@@ -41,6 +41,9 @@ interface DataTableProps<TData> {
   data: TData[]
   searchKey: string
   onSelectedRowsChange?: (rows: TData[]) => void
+  onToggleActive?: (id: string, currentStatus: boolean) => void
+  visibleColumns?: ColumnDef<TData, any>[]
+  onColumnsChange?: (columns: ColumnDef<TData, any>[]) => void
 }
 
 export function DataTable<TData>({
@@ -48,26 +51,37 @@ export function DataTable<TData>({
   data,
   searchKey,
   onSelectedRowsChange,
+  onToggleActive,
+  visibleColumns,
+  onColumnsChange
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [search, setSearch] = useState("")
+
+  // 使用传入的 visibleColumns 或默认使用全部 columns
+  const columnsToDisplay = visibleColumns || columns;
 
   const table = useReactTable({
     data,
-    columns,
+    columns: columnsToDisplay,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     state: {
       sorting,
-      globalFilter,
+      globalFilter: search,
       rowSelection,
     },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
+    onGlobalFilterChange: setSearch,
     enableRowSelection: true,
+    meta: {
+      onToggleActive
+    }
   })
 
   // 当选择改变时通知父组件

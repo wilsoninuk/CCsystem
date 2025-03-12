@@ -10,8 +10,6 @@ interface ImportProduct {
   barcode: string
   description: string
   cost: number
-  mainImage: string | null
-  additionalImages: string[]
   category: string | null
   supplier: string | null
   color: string | null
@@ -123,12 +121,7 @@ export async function POST(request: Request) {
       cartonSize: 'J',
       cartonWeight: 'K',
       moq: 'L',
-      link1688: 'M',
-      mainImage: 'N',
-      image1: 'O',
-      image2: 'P',
-      image3: 'Q',
-      image4: 'R'
+      link1688: 'M'
     }
 
     // 从第二行开始读取数据（跳过标题行）
@@ -161,21 +154,11 @@ export async function POST(request: Request) {
           return num
         }
 
-        // 收集所有附加图片
-        const additionalImages = [
-          getCellValue('image1'),
-          getCellValue('image2'),
-          getCellValue('image3'),
-          getCellValue('image4'),
-        ].filter(url => url && url.trim() !== '') as string[]
-
         const product: ImportProduct = {
           itemNo: getCellValue('itemNo') || '',
           barcode: getCellValue('barcode') || '',
           description: getCellValue('description') || '',
           cost: getNumberValue('cost') || 0,
-          mainImage: getCellValue('mainImage'),
-          additionalImages,
           category: getCellValue('category'),
           supplier: getCellValue('supplier'),
           color: getCellValue('color'),
@@ -225,21 +208,6 @@ export async function POST(request: Request) {
         // 验证成本
         if (product.cost <= 0) {
           throw new Error(`成本必须大于0，当前值: ${product.cost}`)
-        }
-
-        // 验证图片URL格式
-        const validateImageUrl = (url: string | null) => {
-          if (url && !url.match(/^https?:\/\/.+/)) {
-            throw new Error(`图片URL格式错误: ${url}`)
-          }
-        }
-
-        validateImageUrl(product.mainImage)
-        product.additionalImages.forEach(validateImageUrl)
-
-        // 验证图片数量
-        if (product.additionalImages.length > 4) {
-          throw new Error(`附加图片数量超过限制，最多允许4张，当前数量: ${product.additionalImages.length}`)
         }
 
         products.push(product)
@@ -328,11 +296,6 @@ export async function POST(request: Request) {
             if (!newData) continue
 
             try {
-              // 删除现有图片
-              await tx.productImage.deleteMany({
-                where: { productId: existing.id }
-              })
-
               // 更新商品基本信息
               await tx.product.update({
                 where: { id: existing.id },
@@ -352,30 +315,6 @@ export async function POST(request: Request) {
                   updatedBy: user.id
                 }
               })
-
-              // 创建新的图片记录
-              if (newData.mainImage) {
-                await tx.productImage.create({
-                  data: {
-                    url: newData.mainImage,
-                    isMain: true,
-                    order: 0,
-                    productId: existing.id
-                  }
-                })
-              }
-
-              // 创建附加图片记录
-              for (let i = 0; i < newData.additionalImages.length; i++) {
-                await tx.productImage.create({
-                  data: {
-                    url: newData.additionalImages[i],
-                    isMain: false,
-                    order: i + 1,
-                    productId: existing.id
-                  }
-                })
-              }
 
               updatedCount++
             } catch (error) {
@@ -413,30 +352,6 @@ export async function POST(request: Request) {
                 updatedBy: user.id
               }
             })
-
-            // 创建主图记录
-            if (product.mainImage) {
-              await tx.productImage.create({
-                data: {
-                  url: product.mainImage,
-                  isMain: true,
-                  order: 0,
-                  productId: newProduct.id
-                }
-              })
-            }
-
-            // 创建附加图片记录
-            for (let i = 0; i < product.additionalImages.length; i++) {
-              await tx.productImage.create({
-                data: {
-                  url: product.additionalImages[i],
-                  isMain: false,
-                  order: i + 1,
-                  productId: newProduct.id
-                }
-              })
-            }
 
             createdCount++
           } catch (error) {

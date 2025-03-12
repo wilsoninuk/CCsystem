@@ -214,3 +214,166 @@ if (product.picture) {
 #### 相关文件
 - src/app/api/products/export/route.ts
 - src/app/api/image/route.ts（用于处理跨域图片）
+
+# 商品图片管理
+
+## Cloudinary图片方案
+
+本系统使用Cloudinary作为图片存储和管理服务，通过商品条形码直接关联图片，无需手动上传。
+
+### 图片命名规则
+
+图片应按以下规则命名并上传到Cloudinary的`products`文件夹中：
+
+- 主图：`products/{barcode}.jpg`
+- 附图1：`products/{barcode}_1.jpg`
+- 附图2：`products/{barcode}_2.jpg`
+- 附图3：`products/{barcode}_3.jpg`
+- 附图4：`products/{barcode}_4.jpg`
+
+例如，条形码为`123456789`的商品：
+- 主图：`products/123456789.jpg`
+- 附图1：`products/123456789_1.jpg`
+
+### 图片URL示例
+
+```
+https://res.cloudinary.com/duiecmcry/image/upload/products/123456789.jpg
+https://res.cloudinary.com/duiecmcry/image/upload/products/123456789_1.jpg
+```
+
+### 图片格式要求
+
+- 格式：优先使用JPG格式，也支持PNG
+- 尺寸：建议主图尺寸为1000x1000像素，附图尺寸不小于800x800像素
+- 质量：图片质量不低于80%
+
+### 配置说明
+
+在`.env`文件中配置Cloudinary信息：
+
+```
+CLOUDINARY_URL=cloudinary://298213994547619:mLG7TZqfdEG5cqjVPIvWH-FT5j8@duiecmcry
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=duiecmcry
+```
+
+## 图片管理
+
+本系统使用统一的图片管理方法，通过Cloudinary服务获取和显示商品图片。
+
+### 图片获取方式
+
+系统使用以下方式获取商品图片：
+
+1. **Cloudinary图片**：基于商品条形码自动生成图片URL
+   - 主图：`https://res.cloudinary.com/demo/image/upload/products/{barcode}.jpg`
+   - 附图：`https://res.cloudinary.com/demo/image/upload/products/{barcode}_1.jpg` 到 `{barcode}_4.jpg`
+
+2. **数据库图片**：作为备用，当Cloudinary图片加载失败时使用
+   - 存储在数据库的`ProductImage`表中，与`Product`表关联
+
+### 组件说明
+
+系统提供以下组件用于图片显示和管理：
+
+1. **ProductImage组件** (`src/components/ui/product-image.tsx`)
+   - 用于在表格和列表中显示商品图片
+   - 优先使用Cloudinary图片，加载失败时回退到数据库图片
+   - 支持点击打开图片查看器
+
+2. **ProductImageViewer组件** (`src/components/product-image-viewer.tsx`)
+   - 用于查看商品的主图和附图
+   - 显示商品基本信息（商品编号、条形码、描述等）
+   - 支持在主图和附图之间切换
+
+3. **PlaceholderImage组件** (`src/components/ui/placeholder-image.tsx`)
+   - 当图片加载失败或不存在时显示的占位图
+
+### 使用方法
+
+在需要显示商品图片的地方，使用`ProductImage`组件：
+
+```tsx
+<ProductImage
+  product={{
+    id: product.id,
+    barcode: product.barcode,
+    description: product.description,
+    itemNo: product.itemNo,
+    category: product.category,
+    images: product.images
+  }}
+  className="w-16 h-16"
+/>
+```
+
+要查看商品的所有图片，使用`ProductImageViewer`组件：
+
+```tsx
+<ProductImageViewer
+  product={{
+    id: product.id,
+    barcode: product.barcode,
+    description: product.description,
+    itemNo: product.itemNo,
+    category: product.category,
+    images: product.images
+  }}
+  open={isOpen}
+  onOpenChange={setIsOpen}
+/>
+```
+
+### 应用场景
+
+系统在以下场景中统一使用上述图片管理方法：
+
+1. **商品基本信息**：商品列表和详情页面
+2. **报价单管理**：报价单创建、编辑和查看页面
+3. **客户管理**：客户历史订单和商品记录
+
+### 图片URL生成
+
+图片URL通过`src/lib/cloudinary.ts`中的工具函数生成：
+
+```tsx
+// 获取主图URL
+const mainImageUrl = getProductMainImageUrl(barcode);
+
+// 获取附图URL数组
+const additionalImageUrls = getProductAdditionalImageUrls(barcode);
+```
+
+# 产品管理系统
+
+## Cloudinary图片集成
+
+系统已集成Cloudinary作为产品图片存储和管理解决方案。图片通过产品条形码自动关联，无需手动上传或管理图片URL。
+
+### 图片命名规则
+
+- 主图：`{条形码}.jpg`（例如：`1234567890123.jpg`）
+- 附图：`{条形码}_{序号}.jpg`（例如：`1234567890123_1.jpg`，`1234567890123_2.jpg`等）
+
+### 图片显示功能
+
+系统在以下位置显示产品图片：
+
+1. **产品列表**：显示产品主图缩略图，点击可查看大图和附图
+2. **产品详情**：显示主图和附图，支持图片浏览
+3. **报价单**：在报价单中显示产品图片，点击可查看大图和附图
+4. **客户出货记录**：显示产品图片，点击可查看大图和附图
+
+### Excel导入功能
+
+Excel导入模板已更新，移除了图片URL相关的列。系统会根据产品条形码自动从Cloudinary获取图片，无需手动输入图片URL。
+
+### 图片加载机制
+
+1. 系统优先尝试从Cloudinary加载图片（基于条形码）
+2. 如果Cloudinary图片加载失败，系统会尝试使用数据库中存储的图片URL（如果有）
+3. 如果两者都失败，系统会显示默认的占位图片
+
+## 其他功能
+
+[在此添加系统其他功能的说明]

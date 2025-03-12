@@ -13,6 +13,8 @@ import { ImportDialog } from "@/app/(dashboard)/products/components/import-dialo
 import { useRouter } from "next/navigation"
 import { CreateProductDialog } from "./components/create-product-dialog"
 import { ColumnSelectDialog } from "./components/column-select-dialog"
+import { ExportProgressDialog } from "@/components/export-progress-dialog"
+import { ColumnDef } from "@/components/ui/data-table"
 
 console.log('ImportDialog imported:', ImportDialog)
 
@@ -52,6 +54,15 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
   const [isLoading, setIsLoading] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [columnSelectOpen, setColumnSelectOpen] = useState(false)
+
+  // 导出相关状态
+  const [exportProgressOpen, setExportProgressOpen] = useState(false)
+  const [exportProgress, setExportProgress] = useState(0)
+  const [exportStatus, setExportStatus] = useState('')
+  const [exportCompleted, setExportCompleted] = useState(false)
+  const [exportFileName, setExportFileName] = useState<string | undefined>(undefined)
+  const [exportId, setExportId] = useState<string | null>(null)
+  const exportProgressIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // 获取所有供应商（去重并过滤掉 null）
   const suppliers = Array.from(new Set(products.map(p => p.supplier).filter((s): s is string => s !== null)))
@@ -105,6 +116,84 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
     searchKey: "itemNo"
   })
 
+  // 清理导出进度轮询
+  const clearExportProgressInterval = () => {
+    if (exportProgressIntervalRef.current) {
+      clearInterval(exportProgressIntervalRef.current)
+      exportProgressIntervalRef.current = null
+    }
+  }
+  
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      clearExportProgressInterval()
+    }
+  }, [])
+  
+  // 轮询导出进度
+  const pollExportProgress = (id: string) => {
+    // 清理之前的轮询
+    clearExportProgressInterval()
+    
+    // 设置新的轮询
+    exportProgressIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/export-progress?id=${id}`)
+        
+        if (!response.ok) {
+          throw new Error('获取导出进度失败')
+        }
+        
+        const data = await response.json()
+        
+        setExportProgress(data.progress)
+        setExportStatus(data.status)
+        setExportFileName(data.fileName)
+        
+        if (data.isCompleted) {
+          setExportCompleted(true)
+          clearExportProgressInterval()
+          
+          // 如果导出成功，触发下载
+          if (data.progress === 100 && !data.status.includes('失败')) {
+            // 延迟一点时间再触发下载，确保进度条已经显示100%
+            setTimeout(() => {
+              triggerDownload(id)
+            }, 500)
+          }
+        }
+      } catch (error) {
+        console.error('获取导出进度失败:', error)
+        setExportStatus('获取进度失败，请稍后再试')
+      }
+    }, 500) // 每500毫秒轮询一次
+  }
+  
+  // 触发文件下载
+  const triggerDownload = async (id: string) => {
+    try {
+      // 构建下载URL
+      const downloadUrl = selectedRows.length > 0
+        ? `/api/products/export?ids=${selectedRows.join(',')}&exportId=${id}`
+        : `/api/products/export?exportId=${id}`
+      
+      // 创建一个隐藏的a标签并触发下载
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = exportFileName || `商品列表_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+      
+      toast.success('导出成功')
+    } catch (error) {
+      console.error('下载文件失败:', error)
+      toast.error('下载文件失败')
+    }
+  }
+
   // 修改批量删除处理函数
   const handleBatchDelete = async () => {
     if (selectedRows.length === 0) {
@@ -156,27 +245,77 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
 
   const handleExport = async () => {
     try {
-      const response = await fetch('/api/products/export', {
-        method: 'GET'
-      })
-
-      if (!response.ok) {
-        throw new Error('导出失败')
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `商品列表_${new Date().toISOString().split('T')[0]}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // 重置导出状态
+      setExportProgress(0)
+      setExportStatus('准备导出...')
+      setExportCompleted(false)
+      setExportFileName(undefined)
+      setExportProgressOpen(true)
       
-      toast.success('导出成功')
+      // 构建请求URL和请求体
+      const url = '/api/products/export'
+      const method = selectedRows.length > 0 ? 'POST' : 'GET'
+      const body = selectedRows.length > 0 ? JSON.stringify({ ids: selectedRows }) : undefined
+      
+      // 发送请求
+      const response = await fetch(url, {
+        method,
+        headers: method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+        body
+      })
+      
+      if (!response.ok) {
+        throw new Error('导出请求失败')
+      }
+      
+      // 解析响应
+      const contentType = response.headers.get('content-type')
+      
+      if (contentType && contentType.includes('application/json')) {
+        // 如果返回的是JSON，说明是进度信息
+        const data = await response.json()
+        
+        if (data.error) {
+          throw new Error(data.error)
+        }
+        
+        // 保存导出ID并开始轮询进度
+        setExportId(data.exportId)
+        pollExportProgress(data.exportId)
+      } else {
+        // 如果返回的是文件，直接下载
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const contentDisposition = response.headers.get('content-disposition')
+        let filename = '商品列表.xlsx'
+        
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename=([^;]+)/)
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/"/g, '')
+          }
+        }
+        
+        setExportFileName(filename)
+        setExportProgress(100)
+        setExportStatus('导出完成')
+        setExportCompleted(true)
+        
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        
+        toast.success('导出成功')
+      }
     } catch (error) {
       console.error('导出失败:', error)
+      setExportStatus(`导出失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      setExportProgress(100)
+      setExportCompleted(true)
       toast.error('导出失败')
     }
   }
@@ -420,7 +559,7 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         onOpenChange={setColumnSelectOpen}
         columns={columns}
         visibleColumns={visibleColumns}
-        onColumnsChange={setVisibleColumns}
+        onColumnsChange={(cols) => setVisibleColumns(cols as ColumnDef<ProductWithRelations>[])}
       />
 
       <DataTable 
@@ -431,6 +570,16 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
           setSelectedRows(rows.map(row => row.id))
         }}
         onToggleActive={handleToggleActive}
+      />
+
+      {/* 导出进度对话框 */}
+      <ExportProgressDialog
+        open={exportProgressOpen}
+        onOpenChange={setExportProgressOpen}
+        progress={exportProgress}
+        status={exportStatus}
+        fileName={exportFileName}
+        isCompleted={exportCompleted}
       />
     </div>
   )

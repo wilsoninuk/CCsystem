@@ -16,6 +16,9 @@ import { DataTableColumnHeader } from "@/components/ui/data-table-column-header"
 import { Badge } from "@/components/ui/badge"
 import { zhCN } from "date-fns/locale"
 import { ProductDetailDialog } from "./components/product-detail-dialog"
+import { getProductMainImageUrl } from "@/lib/cloudinary"
+import { PlaceholderImage } from "@/components/ui/placeholder-image"
+import { ProductImage as ProductImageComponent } from "@/components/ui/product-image"
 
 // 定义可选列配置类型
 interface OptionalColumn {
@@ -80,7 +83,8 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
     header: "主图",
     cell: ({ row }) => {
       const [detailOpen, setDetailOpen] = useState(false)
-      const mainImage = row.original.images?.find(img => img.isMain)
+      const product = row.original
+      const router = useRouter()
       
       return (
         <>
@@ -88,17 +92,19 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
             className="relative w-16 h-16 cursor-pointer hover:opacity-80 transition-opacity"
             onClick={() => setDetailOpen(true)}
           >
-            {mainImage ? (
-              <img
-                src={mainImage.url}
-                alt={row.original.description}
-                className="object-cover w-full h-full rounded"
-              />
-            ) : (
-              <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center text-gray-400">
-                无图片
-              </div>
-            )}
+            <ProductImageComponent
+              key={`product-image-${product.id}-${product.updatedAt.toString()}`}
+              product={{
+                id: product.id,
+                barcode: product.barcode,
+                description: product.description,
+                itemNo: product.itemNo,
+                category: product.category || undefined,
+                images: product.images
+              }}
+              className="w-full h-full"
+              showViewer={false}
+            />
           </div>
 
           <ProductDetailDialog
@@ -107,7 +113,7 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
             onOpenChange={setDetailOpen}
             onSuccess={() => {
               setDetailOpen(false)
-              window.location.reload()
+              router.refresh()
             }}
           />
         </>
@@ -256,6 +262,7 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
     cell: ({ row, table }) => {
       const product = row.original
       const [editOpen, setEditOpen] = useState(false)
+      const router = useRouter()
 
       return (
         <div className="flex justify-end gap-2">
@@ -279,7 +286,7 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
             open={editOpen}
             onOpenChange={setEditOpen}
             onSuccess={() => {
-              window.location.reload()
+              router.refresh()
             }}
           />
         </div>

@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import { Product } from '@prisma/client'
 import { saveAs } from 'file-saver'
 import { QuotationItem } from '@/types/quotation'
+import { getProductMainImageUrl, getProductAdditionalImageUrls } from "@/lib/cloudinary"
 
 // 定义 Excel 列的映射关系
 const EXCEL_HEADERS = {
@@ -100,16 +101,28 @@ interface ExportOptions {
 // 添加图片处理的辅助函数
 async function getImageBuffer(imageUrl: string): Promise<Buffer> {
   try {
-    // 使用我们的图片代理 API
+    // 尝试直接获取图片
+    try {
+      const response = await fetch(imageUrl, { cache: 'no-store' })
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer()
+        return Buffer.from(arrayBuffer)
+      }
+    } catch (directError) {
+      console.error('直接获取图片失败，尝试使用代理:', directError)
+    }
+
+    // 如果直接获取失败，使用我们的图片代理 API
     const response = await fetch(`/api/image?url=${encodeURIComponent(imageUrl)}`)
     if (!response.ok) {
-      throw new Error('Failed to fetch image')
+      throw new Error(`Failed to fetch image via proxy: ${response.status} ${response.statusText}`)
     }
     const arrayBuffer = await response.arrayBuffer()
     return Buffer.from(arrayBuffer)
   } catch (error) {
-    console.error('Failed to fetch image:', error)
-    throw error
+    console.error('Failed to fetch image:', error, 'URL:', imageUrl)
+    // 返回一个1x1像素的透明图片作为备用
+    return Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
   }
 }
 
@@ -307,7 +320,7 @@ export async function exportQuotationToExcel(items: QuotationItem[], fileName: s
   });
 
   // 设置列宽和对齐方式
-  worksheet.columns = [
+  const baseColumns = [
     { header: '主图', width: 15 },
     { header: '商品编号', width: 15 },
     { header: '条形码', width: 15 },
@@ -324,6 +337,16 @@ export async function exportQuotationToExcel(items: QuotationItem[], fileName: s
     { header: '利润(RMB)', width: 15 },
     { header: '备注', width: 20 }
   ];
+
+  // 添加附图列 - 固定为4张附图
+  const maxAdditionalImages = 4;
+  const additionalImageColumns = Array.from({ length: maxAdditionalImages }, (_, i) => ({
+    header: `附图${i + 1}`,
+    key: `additionalImage${i}`,
+    width: 15
+  }));
+
+  worksheet.columns = [...baseColumns, ...additionalImageColumns];
 
   // 设置标题行样式
   const headerRow = worksheet.getRow(1);
@@ -351,6 +374,11 @@ export async function exportQuotationToExcel(items: QuotationItem[], fileName: s
       item.remark || ''
     ]);
 
+    // 为附图列添加空值
+    for (let j = 0; j < maxAdditionalImages; j++) {
+      row.getCell(baseColumns.length + j + 1).value = '';
+    }
+
     // 设置行高
     row.height = 80;
 
@@ -369,43 +397,84 @@ export async function exportQuotationToExcel(items: QuotationItem[], fileName: s
     const item = items[i];
     const rowIndex = i + 2; // 数据从第2行开始
 
+    // 获取Cloudinary图片URL
+    const cloudinaryMainImageUrl = getProductMainImageUrl(item.barcode);
+    const cloudinaryAdditionalImageUrls = getProductAdditionalImageUrls(item.barcode, maxAdditionalImages);
+
     // 添加主图
     try {
-      const mainImage = item.product.images?.find(img => img.isMain)?.url || item.product.picture;
-      if (mainImage) {
-        const imageBuffer = await getImageBuffer(mainImage);
-        const imageId = workbook.addImage({
-          buffer: imageBuffer as any,
-          extension: 'jpeg',
-        });
-        
-        worksheet.addImage(imageId, {
-          tl: { col: 0, row: rowIndex - 1 } as any,
-          br: { col: 1, row: rowIndex } as any,
-          editAs: 'oneCell'
-        });
-      }
+      const imageBuffer = await getImageBuffer(cloudinaryMainImageUrl);
+      const imageId = workbook.addImage({
+        buffer: imageBuffer as any,
+        extension: 'jpeg',
+      });
+      
+      worksheet.addImage(imageId, {
+        tl: { col: 0, row: rowIndex - 1 } as any,
+        br: { col: 1, row: rowIndex } as any,
+        editAs: 'oneCell'
+      });
     } catch (error) {
-      console.error(`Failed to add main image for product ${item.product.itemNo}:`, error);
+      console.error(`Failed to add Cloudinary main image for product ${item.product.itemNo}:`, error);
+      
+      // 如果Cloudinary图片获取失败，尝试使用数据库中的图片
+      try {
+        const mainImage = item.product.images?.find(img => img.isMain)?.url || item.product.picture;
+        if (mainImage) {
+          const imageBuffer = await getImageBuffer(mainImage);
+          const imageId = workbook.addImage({
+            buffer: imageBuffer as any,
+            extension: 'jpeg',
+          });
+          
+          worksheet.addImage(imageId, {
+            tl: { col: 0, row: rowIndex - 1 } as any,
+            br: { col: 1, row: rowIndex } as any,
+            editAs: 'oneCell'
+          });
+        }
+      } catch (innerError) {
+        console.error(`Failed to add database main image for product ${item.product.itemNo}:`, innerError);
+      }
     }
 
-    // 添加附图（从第15列开始）
-    const additionalImages = item.product.images?.filter(img => !img.isMain) || [];
-    for (let j = 0; j < additionalImages.length; j++) {
+    // 添加附图
+    for (let j = 0; j < maxAdditionalImages; j++) {
       try {
-        const imageBuffer = await getImageBuffer(additionalImages[j].url);
+        const additionalImageUrl = cloudinaryAdditionalImageUrls[j];
+        const imageBuffer = await getImageBuffer(additionalImageUrl);
         const imageId = workbook.addImage({
           buffer: imageBuffer as any,
           extension: 'jpeg',
         });
         
         worksheet.addImage(imageId, {
-          tl: { col: 15 + j, row: rowIndex - 1 } as any,
-          br: { col: 16 + j, row: rowIndex } as any,
+          tl: { col: baseColumns.length + j, row: rowIndex - 1 } as any,
+          br: { col: baseColumns.length + j + 1, row: rowIndex } as any,
           editAs: 'oneCell'
         });
       } catch (error) {
-        console.error(`Failed to add additional image ${j + 1} for product ${item.product.itemNo}:`, error);
+        console.error(`Failed to add Cloudinary additional image ${j + 1} for product ${item.product.itemNo}:`, error);
+        
+        // 如果Cloudinary附图获取失败，尝试使用数据库中的附图
+        try {
+          const additionalImages = item.product.images?.filter(img => !img.isMain) || [];
+          if (additionalImages[j]) {
+            const imageBuffer = await getImageBuffer(additionalImages[j].url);
+            const imageId = workbook.addImage({
+              buffer: imageBuffer as any,
+              extension: 'jpeg',
+            });
+            
+            worksheet.addImage(imageId, {
+              tl: { col: baseColumns.length + j, row: rowIndex - 1 } as any,
+              br: { col: baseColumns.length + j + 1, row: rowIndex } as any,
+              editAs: 'oneCell'
+            });
+          }
+        } catch (innerError) {
+          console.error(`Failed to add database additional image ${j + 1} for product ${item.product.itemNo}:`, innerError);
+        }
       }
     }
   }
@@ -428,6 +497,11 @@ export async function exportQuotationToExcel(items: QuotationItem[], fileName: s
     items.reduce((sum, item) => sum + (item.profit || 0), 0),
     ''
   ]);
+
+  // 为附图列添加空值
+  for (let j = 0; j < maxAdditionalImages; j++) {
+    totalRow.getCell(baseColumns.length + j + 1).value = '';
+  }
 
   // 设置总计行样式
   totalRow.font = { bold: true };
@@ -526,8 +600,14 @@ export async function exportQuotationDetail(quotation: {
     '总价(USD)'
   ];
 
+  // 添加附图列 - 固定为4张附图
+  const maxAdditionalImages = 4;
+  for (let i = 0; i < maxAdditionalImages; i++) {
+    headers.push(`附图${i + 1}`);
+  }
+
   // 设置列宽
-  worksheet.columns = [
+  const baseColumns = [
     { width: 6 },   // 序号
     { width: 12 },  // 图片
     { width: 15 },  // 商品编号
@@ -540,6 +620,13 @@ export async function exportQuotationDetail(quotation: {
     { width: 12 }   // 总价(USD)
   ];
 
+  // 添加附图列宽
+  for (let i = 0; i < maxAdditionalImages; i++) {
+    baseColumns.push({ width: 12 }); // 附图列宽
+  }
+
+  worksheet.columns = baseColumns;
+
   // 添加表头行
   const headerRow = worksheet.addRow(headers);
   headerRow.height = 20;
@@ -548,7 +635,7 @@ export async function exportQuotationDetail(quotation: {
 
   // 第一步：添加所有数据行
   quotation.items.forEach((item) => {
-    const row = worksheet.addRow([
+    const rowData = [
       item.serialNo,
       '', // 图片占位
       item.product.itemNo,
@@ -559,10 +646,17 @@ export async function exportQuotationDetail(quotation: {
       item.exwPriceUSD,
       item.exwPriceRMB * item.quantity,
       item.exwPriceUSD * item.quantity
-    ]);
+    ];
+
+    // 为附图列添加空值
+    for (let i = 0; i < maxAdditionalImages; i++) {
+      rowData.push('');
+    }
+
+    const row = worksheet.addRow(rowData);
 
     // 设置行高和样式
-    row.height = 45;
+    row.height = 60;
     row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
     // 设置数字格式
@@ -577,28 +671,90 @@ export async function exportQuotationDetail(quotation: {
     const item = quotation.items[i];
     const rowIndex = i + 7; // 数据从第7行开始（前面有6行是标题和表头）
 
+    // 获取Cloudinary图片URL
+    const cloudinaryMainImageUrl = getProductMainImageUrl(item.barcode);
+    const cloudinaryAdditionalImageUrls = getProductAdditionalImageUrls(item.barcode, maxAdditionalImages);
+
+    // 处理主图
     try {
-      const mainImage = item.product.images?.find(img => img.isMain)?.url;
-      if (mainImage) {
-        const imageBuffer = await getImageBuffer(mainImage);
+      const imageBuffer = await getImageBuffer(cloudinaryMainImageUrl);
+      const imageId = workbook.addImage({
+        buffer: imageBuffer as any,
+        extension: 'jpeg',
+      });
+      
+      worksheet.addImage(imageId, {
+        tl: { col: 1, row: rowIndex - 1 } as any,
+        br: { col: 2, row: rowIndex } as any,
+        editAs: 'oneCell'
+      });
+    } catch (error) {
+      console.error(`Failed to add Cloudinary main image for product ${item.product.itemNo}:`, error);
+      
+      // 如果Cloudinary图片获取失败，尝试使用数据库中的图片
+      try {
+        const mainImage = item.product.images?.find(img => img.isMain)?.url;
+        if (mainImage) {
+          const imageBuffer = await getImageBuffer(mainImage);
+          const imageId = workbook.addImage({
+            buffer: imageBuffer as any,
+            extension: 'jpeg',
+          });
+          
+          worksheet.addImage(imageId, {
+            tl: { col: 1, row: rowIndex - 1 } as any,
+            br: { col: 2, row: rowIndex } as any,
+            editAs: 'oneCell'
+          });
+        }
+      } catch (innerError) {
+        console.error(`Failed to add database main image for product ${item.product.itemNo}:`, innerError);
+      }
+    }
+
+    // 处理附图
+    for (let j = 0; j < maxAdditionalImages; j++) {
+      try {
+        const additionalImageUrl = cloudinaryAdditionalImageUrls[j];
+        const imageBuffer = await getImageBuffer(additionalImageUrl);
         const imageId = workbook.addImage({
           buffer: imageBuffer as any,
           extension: 'jpeg',
         });
         
         worksheet.addImage(imageId, {
-          tl: { col: 1, row: rowIndex - 1 } as any,
-          br: { col: 2, row: rowIndex } as any,
+          tl: { col: 10 + j, row: rowIndex - 1 } as any,
+          br: { col: 11 + j, row: rowIndex } as any,
           editAs: 'oneCell'
         });
+      } catch (error) {
+        console.error(`Failed to add Cloudinary additional image ${j + 1} for product ${item.product.itemNo}:`, error);
+        
+        // 如果Cloudinary附图获取失败，尝试使用数据库中的附图
+        try {
+          const additionalImages = item.product.images?.filter(img => !img.isMain) || [];
+          if (additionalImages[j]) {
+            const imageBuffer = await getImageBuffer(additionalImages[j].url);
+            const imageId = workbook.addImage({
+              buffer: imageBuffer as any,
+              extension: 'jpeg',
+            });
+            
+            worksheet.addImage(imageId, {
+              tl: { col: 10 + j, row: rowIndex - 1 } as any,
+              br: { col: 11 + j, row: rowIndex } as any,
+              editAs: 'oneCell'
+            });
+          }
+        } catch (innerError) {
+          console.error(`Failed to add database additional image ${j + 1} for product ${item.product.itemNo}:`, innerError);
+        }
       }
-    } catch (error) {
-      console.error(`Failed to add image for product ${item.product.itemNo}:`, error);
     }
   }
 
   // 添加总计行
-  const totalRow = worksheet.addRow([
+  const totalRowData = [
     '总计',
     '',
     '',
@@ -609,7 +765,14 @@ export async function exportQuotationDetail(quotation: {
     '',
     quotation.totalAmountRMB,
     quotation.totalAmountUSD
-  ]);
+  ];
+
+  // 为附图列添加空值
+  for (let i = 0; i < maxAdditionalImages; i++) {
+    totalRowData.push('');
+  }
+
+  const totalRow = worksheet.addRow(totalRowData);
 
   // 设置总计行样式
   totalRow.height = 20;

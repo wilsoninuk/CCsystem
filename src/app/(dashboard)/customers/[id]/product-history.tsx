@@ -22,8 +22,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { formatDate } from "@/lib/utils"
-import { ProductImage } from "@/components/ui/image"
-import { ImageGallery } from "@/app/(dashboard)/products/components/image-gallery"
+import { ProductImage } from "@/components/ui/product-image"
+import { ProductImageViewer } from "@/components/product-image-viewer"
 import type { CustomerProductHistory, Product, ProductImage as ProductImageType } from "@prisma/client"
 import Link from "next/link"
 import {
@@ -184,12 +184,19 @@ export function ProductHistory({ history }: ProductHistoryProps) {
             <TableRow key={item.id}>
               <TableCell>
                 <div 
-                  className="relative w-16 h-16 cursor-pointer"
+                  className="relative w-16 h-16"
                   onClick={() => setSelectedProduct(item.product)}
                 >
                   <ProductImage
-                    src={item.product.images.find(img => img.isMain)?.url || null}
-                    alt={item.product.description}
+                    product={{
+                      id: item.product.id,
+                      barcode: item.product.barcode,
+                      description: item.product.description,
+                      itemNo: item.product.itemNo,
+                      category: item.product.category,
+                      images: item.product.images
+                    }}
+                    className="w-full h-full"
                   />
                 </div>
               </TableCell>
@@ -259,20 +266,18 @@ export function ProductHistory({ history }: ProductHistoryProps) {
       </div>
 
       {selectedProduct && (
-        <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>商品图片</DialogTitle>
-            </DialogHeader>
-            <ImageGallery
-              mainImage={selectedProduct.images.find(img => img.isMain)?.url || null}
-              additionalImages={selectedProduct.images.filter(img => !img.isMain).map(img => img.url)}
-              onMainImageChange={async () => {}}
-              onAdditionalImagesChange={async () => {}}
-              disabled={true}
-            />
-          </DialogContent>
-        </Dialog>
+        <ProductImageViewer
+          product={{
+            id: selectedProduct.id,
+            barcode: selectedProduct.barcode,
+            description: selectedProduct.description,
+            itemNo: selectedProduct.itemNo,
+            category: selectedProduct.category,
+            images: selectedProduct.images
+          }}
+          open={!!selectedProduct}
+          onOpenChange={(open) => !open && setSelectedProduct(null)}
+        />
       )}
     </div>
   )

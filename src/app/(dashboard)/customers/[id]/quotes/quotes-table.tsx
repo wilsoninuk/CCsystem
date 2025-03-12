@@ -6,14 +6,17 @@ import { Customer, Quotation, QuotationItem } from "@prisma/client"
 import { Button } from "@/components/ui/button"
 import { ArrowUpDown, Eye, FileText } from "lucide-react"
 import Link from "next/link"
-import Image from "next/image"
+import { ProductImage } from "@/components/ui/product-image"
 
 interface QuotationItemWithProduct extends QuotationItem {
   product: {
+    id: string
     itemNo: string
     barcode: string
     description: string
     picture: string | null
+    category?: string | null
+    images?: Array<{ id: string, url: string, isMain: boolean }>
   }
 }
 
@@ -59,16 +62,20 @@ const columns: ColumnDef<QuotationItemWithProduct>[] = [
     id: "picture",
     header: "Picture",
     cell: ({ row }) => {
-      const picture = row.original.product.picture
-      if (!picture) return null
+      const product = row.original.product
       
       return (
         <div className="relative w-16 h-16">
-          <Image
-            src={picture}
-            alt={row.original.product.description || ""}
-            fill
-            className="object-contain"
+          <ProductImage
+            product={{
+              id: product.id,
+              barcode: row.original.barcode,
+              description: product.description,
+              itemNo: product.itemNo,
+              category: product.category,
+              images: product.images || []
+            }}
+            className="w-full h-full"
           />
         </div>
       )

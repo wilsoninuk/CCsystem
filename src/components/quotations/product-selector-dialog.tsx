@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ProductImage } from "@/components/ui/image"
+import { ProductImage } from "@/components/ui/product-image"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useQuery } from "@tanstack/react-query"
 
@@ -191,10 +191,17 @@ export function ProductSelectorDialog({
                       className="mr-2"
                     />
                     <div className="w-[120px] truncate">{product.barcode}</div>
-                    <div className="w-[20px] h-[20px] mx-2">
+                    <div className="w-[40px] h-[40px] mx-2">
                       <ProductImage
-                        src={product.images?.find(img => img.isMain)?.url || product.picture || null}
-                        alt={product.description}
+                        product={{
+                          id: product.id,
+                          barcode: product.barcode,
+                          description: product.description,
+                          itemNo: product.itemNo,
+                          category: product.category ?? undefined,
+                          images: product.images
+                        }}
+                        className="w-full h-full"
                       />
                     </div>
                     <div className="w-[80px] truncate">{product.category}</div>
@@ -216,10 +223,17 @@ export function ProductSelectorDialog({
                 {Array.from(selectedProducts.values()).map(({ product, quantity }) => (
                   <div key={product.id} className="py-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-[20px] h-[20px]">
+                      <div className="w-[40px] h-[40px]">
                         <ProductImage
-                          src={product.images?.find(img => img.isMain)?.url || product.picture || null}
-                          alt={product.description}
+                          product={{
+                            id: product.id,
+                            barcode: product.barcode,
+                            description: product.description,
+                            itemNo: product.itemNo,
+                            category: product.category ?? undefined,
+                            images: product.images
+                          }}
+                          className="w-full h-full"
                         />
                       </div>
                       <div className="flex-1">

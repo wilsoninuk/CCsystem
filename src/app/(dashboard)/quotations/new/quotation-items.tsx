@@ -492,27 +492,34 @@ export function QuotationItems({
               >
                 <TableCell>
                   <div 
-                    className="relative w-16 h-16 cursor-pointer"
-                    onClick={() => {
-                      // 确保 images 数据存在
-                      const itemWithImages = {
-                        ...item,
-                        product: {
-                          ...item.product,
-                          images: item.product.images || []
-                        }
-                      }
-                      console.log('QuotationItems - 点击图片时的完整数据:', {
-                        productId: itemWithImages.productId,
-                        images: itemWithImages.product.images,
-                        picture: itemWithImages.product.picture
-                      })
-                      onImageClick?.(itemWithImages)
-                    }}
+                    className="relative w-16 h-16"
                   >
                     <ProductImage
-                      src={item.product.images?.find(img => img.isMain)?.url || item.product.picture || null}
-                      alt={item.product.description}
+                      product={{
+                        id: item.product.id,
+                        barcode: item.barcode,
+                        description: item.product.description,
+                        itemNo: item.product.itemNo,
+                        category: item.product.category,
+                        images: item.product.images || []
+                      }}
+                      className="w-full h-full"
+                      onClick={() => {
+                        // 确保 images 数据存在
+                        const itemWithImages = {
+                          ...item,
+                          product: {
+                            ...item.product,
+                            images: item.product.images || []
+                          }
+                        }
+                        console.log('QuotationItems - 点击图片时的完整数据:', {
+                          productId: itemWithImages.productId,
+                          images: itemWithImages.product.images,
+                          picture: itemWithImages.product.picture
+                        })
+                        onImageClick?.(itemWithImages)
+                      }}
                     />
                   </div>
                 </TableCell>

@@ -12,7 +12,7 @@ import { QuotationItem as QuotationItemType } from "@/types/quotation"
 import { ProductSelectorDialog } from "@/components/quotations/product-selector-dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { getProductsHistoryPrices } from "@/lib/services/price-history"
-import { ImageGallery } from "@/app/(dashboard)/products/components/image-gallery"
+import { ProductImageViewer } from "@/components/product-image-viewer"
 import {
   Dialog,
   DialogContent,
@@ -84,7 +84,28 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
     products: []
   });
 
-  const handleProductsSelected = (products: Array<{ product: Product & { images?: ProductImage[] }; quantity: number }>) => {
+  const handleProductsSelected = (products: Array<{ 
+    product: Product & { 
+      images?: ProductImage[];
+      cartonSize?: string | null;
+      cartonWeight?: number | null;
+      color?: string | null;
+      createdAt?: Date;
+      updatedAt?: Date;
+      isActive?: boolean;
+      picture?: string | null;
+      link1688?: string | null;
+      material?: string | null;
+      moq?: number | null;
+      additionalPictures?: string[];
+      productSize?: string | null;
+      supplier?: string | null;
+      category?: string | null;
+      createdBy?: string | null;
+      updatedBy?: string | null;
+    }; 
+    quantity: number 
+  }>) => {
     // 检查重复商品
     const duplicateProducts = products.filter(({ product }) => 
       items.some(item => item.barcode === product.barcode)
@@ -125,10 +146,14 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
             id: product.id,
             itemNo: product.itemNo,
             barcode: product.barcode || '',
-            description: product.description,
-            picture: product.picture,
+            description: product.description || '',
+            picture: product.picture || null,
             cost: product.cost || 0,
-            category: product.category,  // 确保包含 category
+            category: product.category || null,
+            color: product.color || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
             supplier: {
               name: product.supplier || ''
             },
@@ -190,10 +215,15 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
           product: {
             id: product.id,
             itemNo: product.itemNo,
-            barcode: product.barcode,
-            description: product.description,
-            picture: product.picture,
-            cost: product.cost,
+            barcode: product.barcode || '',
+            description: product.description || '',
+            picture: product.picture || null,
+            cost: product.cost || 0,
+            category: product.category || null,
+            color: product.color || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
             supplier: {
               name: product.supplier || ''
             },
@@ -344,7 +374,7 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
       <ProductSelectorDialog
         open={isProductSelectorOpen}
         onOpenChange={setIsProductSelectorOpen}
-        onConfirm={handleProductsSelected}
+        onConfirm={(products: any) => handleProductsSelected(products)}
       />
 
       <QuotationItems
@@ -357,23 +387,18 @@ function EditQuotationFormContent({ quotation }: EditQuotationFormProps) {
 
       {/* 图片查看对话框 */}
       {selectedProduct && (
-        <Dialog 
-          open={!!selectedProduct} 
+        <ProductImageViewer
+          product={{
+            id: selectedProduct.product.id,
+            barcode: selectedProduct.barcode,
+            description: selectedProduct.product.description,
+            itemNo: selectedProduct.product.itemNo,
+            category: selectedProduct.product.category ?? undefined,
+            images: selectedProduct.product.images
+          }}
+          open={!!selectedProduct}
           onOpenChange={(open) => !open && setSelectedProduct(null)}
-        >
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>商品图片</DialogTitle>
-            </DialogHeader>
-            <ImageGallery
-              mainImage={selectedProduct.product.images?.find(img => img.isMain)?.url || selectedProduct.product.picture || null}
-              additionalImages={selectedProduct.product.images?.filter(img => !img.isMain)?.map(img => img.url) || []}
-              onMainImageChange={async () => {}}
-              onAdditionalImagesChange={async () => {}}
-              disabled={true}
-            />
-          </DialogContent>
-        </Dialog>
+        />
       )}
 
       {/* 重复商品提示对话框 */}

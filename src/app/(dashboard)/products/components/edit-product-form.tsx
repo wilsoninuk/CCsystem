@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Product } from "@prisma/client"
+import { useRouter } from "next/navigation"
 
 // 使用与 ProductForm 相同的表单验证规则
 const formSchema = z.object({
@@ -39,6 +40,7 @@ interface EditProductFormProps {
 
 export function EditProductForm({ product, open, onOpenChange, onSuccess }: EditProductFormProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -79,6 +81,9 @@ export function EditProductForm({ product, open, onOpenChange, onSuccess }: Edit
       toast.success('更新成功')
       onSuccess()
       onOpenChange(false)
+      
+      // 使用router.refresh()刷新数据，而不是刷新整个页面
+      router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '更新失败')
     } finally {

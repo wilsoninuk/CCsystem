@@ -14,7 +14,7 @@ import {
 import { formatDate } from "@/lib/utils"
 import { FileText, FileDown } from "lucide-react"
 import type { Quotation, QuotationItem, Customer, Product, ProductImage as ProductImageType, User, QuotationRevision } from "@prisma/client"
-import { ProductImage } from "@/components/ui/image"
+import { ProductImage } from "@/components/ui/product-image"
 import { exportQuotationDetail } from "@/lib/excel"
 
 interface QuotationDetailProps {
@@ -135,8 +135,15 @@ export function QuotationDetail({ quotation }: QuotationDetailProps) {
               <TableCell>
                 <div className="relative w-16 h-16">
                   <ProductImage
-                    src={item.product.images[0]?.url}
-                    alt={item.product.description}
+                    product={{
+                      id: item.product.id,
+                      barcode: item.barcode,
+                      description: item.product.description,
+                      itemNo: item.product.itemNo,
+                      category: item.product.category,
+                      images: item.product.images
+                    }}
+                    className="w-full h-full"
                   />
                 </div>
               </TableCell>

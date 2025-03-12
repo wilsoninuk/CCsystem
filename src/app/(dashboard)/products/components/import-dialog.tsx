@@ -90,7 +90,9 @@ export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps
             <h4 className="font-medium">注意事项：</h4>
             <ul className="list-disc pl-4 text-sm text-muted-foreground">
               <li>商品编号、条形码、商品描述、成本为必填项</li>
-              <li>图片支持 http(s) 开头的图片链接</li>
+              <li>条形码必须是13位数字，且不能重复</li>
+              <li>系统会根据条形码自动从Cloudinary获取图片</li>
+              <li>图片命名规则：主图为"条形码.jpg"，附图为"条形码_1.jpg"等</li>
               <li>成本和重量支持最多2位小数</li>
               <li>MOQ必须为整数</li>
               <li>Excel文件大小不能超过10MB</li>

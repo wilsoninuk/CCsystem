@@ -14,7 +14,7 @@ import { QuotationItem as QuotationItemType } from "@/types/quotation"  // 使�
 import { ProductSelectorDialog } from "@/components/quotations/product-selector-dialog"
 import { getProductsHistoryPrices } from "@/lib/services/price-history"
 import { Switch } from "@/components/ui/switch"
-import { ImageGallery } from "@/app/(dashboard)/products/components/image-gallery"
+import { ProductImageViewer } from "@/components/product-image-viewer"
 import {
   Dialog,
   DialogContent,
@@ -360,23 +360,18 @@ export function NewQuotationForm({ customers }: NewQuotationFormProps) {
 
         {/* 图片查看对话框 */}
         {selectedProduct && (
-          <Dialog 
-            open={!!selectedProduct} 
+          <ProductImageViewer
+            product={{
+              id: selectedProduct.product.id,
+              barcode: selectedProduct.barcode,
+              description: selectedProduct.product.description,
+              itemNo: selectedProduct.product.itemNo,
+              category: selectedProduct.product.category,
+              images: selectedProduct.product.images
+            }}
+            open={!!selectedProduct}
             onOpenChange={(open) => !open && setSelectedProduct(null)}
-          >
-            <DialogContent className="max-w-4xl">
-              <DialogHeader>
-                <DialogTitle>商品图片</DialogTitle>
-              </DialogHeader>
-              <ImageGallery
-                mainImage={selectedProduct.product.images?.find(img => img.isMain)?.url || selectedProduct.product.picture || null}
-                additionalImages={selectedProduct.product.images?.filter(img => !img.isMain)?.map(img => img.url) || []}
-                onMainImageChange={async () => {}}
-                onAdditionalImagesChange={async () => {}}
-                disabled={true}
-              />
-            </DialogContent>
-          </Dialog>
+          />
         )}
 
         {/* 重复商品提示对话框 */}
