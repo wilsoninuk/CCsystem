@@ -36,6 +36,24 @@ const generateBarcode = (itemNo: string): string => {
   return `${itemNo}${timestamp}${random}`
 }
 
+// 批量处理配置
+const BATCH_SIZE = 20 // 每批处理的产品数量
+const BATCH_DELAY = 300 // 批次间延迟（毫秒）
+
+// 辅助函数：将数组分割成指定大小的批次
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size))
+  }
+  return chunks
+}
+
+// 辅助函数：延迟指定时间
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export async function POST(request: Request) {
   try {
     // 1. 获取当前用户会话
@@ -75,6 +93,13 @@ export async function POST(request: Request) {
     let createdCount = 0
     let updatedCount = 0
     let errorCount = 0
+    let processedCount = 0
+    let totalCount = 0
+    let failedBatches = [] // 记录失败的批次
+    let batchErrors = [] // 记录批次错误
+
+    // 记录开始时间，用于计算总耗时
+    const startTime = Date.now()
 
     const workbook = new ExcelJS.Workbook()
     
@@ -286,94 +311,203 @@ export async function POST(request: Request) {
       )
     }
 
-    // 使用事务处理所有数据库操作
+    // 将需要更新的产品和新增的产品分开处理
+    const productsToUpdate = updateDuplicates 
+      ? products.filter(p => existingProducts.some(e => e.barcode === p.barcode))
+      : []
+    
+    const productsToCreate = products.filter(p => 
+      !existingProducts.some(e => e.barcode === p.barcode)
+    )
+
+    totalCount = productsToCreate.length + productsToUpdate.length
+    console.log(`总共 ${products.length} 个产品，需要更新 ${productsToUpdate.length} 个，需要创建 ${productsToCreate.length} 个`)
+
+    // 将产品分批处理
+    const updateBatches = chunkArray(productsToUpdate, BATCH_SIZE)
+    const createBatches = chunkArray(productsToCreate, BATCH_SIZE)
+
+    // 进度跟踪函数
+    const updateProgress = (action: string, current: number, total: number, batchIndex: number, batchCount: number) => {
+      const percent = Math.round((current / total) * 100)
+      const elapsedMs = Date.now() - startTime
+      const elapsedSec = Math.round(elapsedMs / 1000)
+      const estimatedTotalSec = total > 0 ? Math.round((elapsedMs / current) * total / 1000) : 0
+      const remainingSec = Math.max(0, estimatedTotalSec - elapsedSec)
+      
+      console.log(
+        `进度: ${action} ${current}/${total} (${percent}%), ` +
+        `批次: ${batchIndex}/${batchCount}, ` +
+        `已用时间: ${elapsedSec}秒, ` +
+        `预计剩余: ${remainingSec}秒`
+      )
+    }
+
     try {
-      await prisma.$transaction(async (tx) => {
-        if (updateDuplicates) {
-          // 更新已存在的商品
-          for (const existing of existingProducts) {
-            const newData = products.find(p => p.barcode === existing.barcode)
-            if (!newData) continue
-
-            try {
-              // 更新商品基本信息
-              await tx.product.update({
-                where: { id: existing.id },
-                data: {
-                  itemNo: newData.itemNo,
-                  description: newData.description,
-                  cost: newData.cost,
-                  category: newData.category,
-                  supplier: newData.supplier,
-                  color: newData.color,
-                  material: newData.material,
-                  productSize: newData.productSize,
-                  cartonSize: newData.cartonSize,
-                  cartonWeight: newData.cartonWeight,
-                  moq: newData.moq,
-                  link1688: newData.link1688,
-                  updatedBy: user.id
-                }
-              })
-
-              updatedCount++
-            } catch (error) {
-              console.error(`更新商品失败 (barcode: ${existing.barcode}):`, error)
-              throw error
-            }
-          }
-        }
-
-        // 添加新商品
-        const newProducts = products.filter(p => 
-          !existingProducts.some(e => e.barcode === p.barcode)
-        )
-
-        // 批量创建新商品
-        for (const product of newProducts) {
+      // 处理更新批次
+      if (updateBatches.length > 0) {
+        console.log(`开始处理 ${updateBatches.length} 个更新批次`)
+        
+        for (let i = 0; i < updateBatches.length; i++) {
+          const batch = updateBatches[i]
+          console.log(`处理更新批次 ${i + 1}/${updateBatches.length}，包含 ${batch.length} 个产品`)
+          
           try {
-            // 创建商品基本信息
-            const newProduct = await tx.product.create({
-              data: {
-                itemNo: product.itemNo,
-                barcode: product.barcode,
-                description: product.description,
-                cost: product.cost,
-                category: product.category,
-                supplier: product.supplier,
-                color: product.color,
-                material: product.material,
-                productSize: product.productSize,
-                cartonSize: product.cartonSize,
-                cartonWeight: product.cartonWeight,
-                moq: product.moq,
-                link1688: product.link1688,
-                createdBy: user.id,
-                updatedBy: user.id
+            // 每个批次使用单独的事务
+            await prisma.$transaction(async (tx) => {
+              for (const product of batch) {
+                const existing = existingProducts.find(e => e.barcode === product.barcode)
+                if (!existing) continue
+
+                await tx.product.update({
+                  where: { id: existing.id },
+                  data: {
+                    itemNo: product.itemNo,
+                    description: product.description,
+                    cost: product.cost,
+                    category: product.category,
+                    supplier: product.supplier,
+                    color: product.color,
+                    material: product.material,
+                    productSize: product.productSize,
+                    cartonSize: product.cartonSize,
+                    cartonWeight: product.cartonWeight,
+                    moq: product.moq,
+                    link1688: product.link1688,
+                    updatedBy: user.id
+                  }
+                })
+                updatedCount++
+                processedCount++
               }
             })
-
-            createdCount++
+            
+            // 更新进度
+            updateProgress('更新', processedCount, totalCount, i + 1, updateBatches.length + createBatches.length)
+            
+            // 批次间添加延迟，避免连接池压力
+            if (i < updateBatches.length - 1) {
+              await delay(BATCH_DELAY)
+            }
           } catch (error) {
-            console.error(`创建商品失败 (barcode: ${product.barcode}):`, error)
-            throw error
+            console.error(`更新批次 ${i + 1} 处理失败:`, error)
+            // 记录失败的批次
+            failedBatches.push({
+              type: 'update',
+              batchIndex: i,
+              products: batch.map(p => p.barcode)
+            })
+            
+            // 记录错误信息
+            batchErrors.push({
+              batchType: 'update',
+              batchIndex: i,
+              error: error instanceof Error ? error.message : '未知错误',
+              timestamp: new Date().toISOString()
+            })
+            
+            // 继续处理下一批次，而不是中断整个过程
+            continue
           }
         }
-      })
+      }
 
+      // 处理创建批次
+      if (createBatches.length > 0) {
+        console.log(`开始处理 ${createBatches.length} 个创建批次`)
+        
+        for (let i = 0; i < createBatches.length; i++) {
+          const batch = createBatches[i]
+          console.log(`处理创建批次 ${i + 1}/${createBatches.length}，包含 ${batch.length} 个产品`)
+          
+          try {
+            // 每个批次使用单独的事务
+            await prisma.$transaction(async (tx) => {
+              for (const product of batch) {
+                await tx.product.create({
+                  data: {
+                    itemNo: product.itemNo,
+                    barcode: product.barcode,
+                    description: product.description,
+                    cost: product.cost,
+                    category: product.category,
+                    supplier: product.supplier,
+                    color: product.color,
+                    material: product.material,
+                    productSize: product.productSize,
+                    cartonSize: product.cartonSize,
+                    cartonWeight: product.cartonWeight,
+                    moq: product.moq,
+                    link1688: product.link1688,
+                    createdBy: user.id,
+                    updatedBy: user.id
+                  }
+                })
+                createdCount++
+                processedCount++
+              }
+            })
+            
+            // 更新进度
+            updateProgress('创建', processedCount, totalCount, updateBatches.length + i + 1, updateBatches.length + createBatches.length)
+            
+            // 批次间添加延迟，避免连接池压力
+            if (i < createBatches.length - 1) {
+              await delay(BATCH_DELAY)
+            }
+          } catch (error) {
+            console.error(`创建批次 ${i + 1} 处理失败:`, error)
+            // 记录失败的批次
+            failedBatches.push({
+              type: 'create',
+              batchIndex: i,
+              products: batch.map(p => p.barcode)
+            })
+            
+            // 记录错误信息
+            batchErrors.push({
+              batchType: 'create',
+              batchIndex: i,
+              error: error instanceof Error ? error.message : '未知错误',
+              timestamp: new Date().toISOString()
+            })
+            
+            // 继续处理下一批次，而不是中断整个过程
+            continue
+          }
+        }
+      }
+
+      // 计算总耗时
+      const totalTimeMs = Date.now() - startTime
+      const totalTimeSec = Math.round(totalTimeMs / 1000)
+      
+      // 确定整体状态
+      const hasFailures = failedBatches.length > 0
+      const status = hasFailures ? 'partial_success' : 'success'
+      
       return NextResponse.json({
-        success: true,
+        status,
         created: createdCount,
         updated: updatedCount,
-        errors: errors.length > 0 ? errors : undefined
-      })
+        errors: errors.length > 0 ? errors : undefined,
+        totalTime: `${totalTimeSec}秒`,
+        averageTimePerItem: totalCount > 0 ? `${Math.round(totalTimeMs / totalCount)}毫秒` : '0毫秒',
+        failedBatchCount: failedBatches.length,
+        failedBatches: hasFailures ? failedBatches : undefined,
+        batchErrors: hasFailures ? batchErrors : undefined,
+        message: hasFailures 
+          ? `部分导入成功：成功创建 ${createdCount} 个产品，更新 ${updatedCount} 个产品，${failedBatches.length} 个批次失败` 
+          : `导入成功：创建 ${createdCount} 个产品，更新 ${updatedCount} 个产品`
+      }, { status: hasFailures ? 207 : 200 }) // 使用207表示部分成功
 
     } catch (error) {
       console.error('数据库操作失败:', error)
       return NextResponse.json(
         { 
           error: '导入失败，数据库操作错误',
-          details: error instanceof Error ? error.message : '未知错误'
+          details: error instanceof Error ? error.message : '未知错误',
+          batchErrors: batchErrors.length > 0 ? batchErrors : undefined
         },
         { status: 500 }
       )
