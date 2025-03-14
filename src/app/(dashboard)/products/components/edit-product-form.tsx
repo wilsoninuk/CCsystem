@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -60,6 +60,27 @@ export function EditProductForm({ product, open, onOpenChange, onSuccess }: Edit
       link1688: product.link1688,
     }
   })
+  
+  // 当product变化时更新表单默认值
+  useEffect(() => {
+    if (product) {
+      form.reset({
+        itemNo: product.itemNo,
+        barcode: product.barcode,
+        description: product.description,
+        category: product.category,
+        cost: product.cost,
+        supplier: product.supplier,
+        color: product.color,
+        material: product.material,
+        productSize: product.productSize,
+        cartonSize: product.cartonSize,
+        cartonWeight: product.cartonWeight,
+        moq: product.moq,
+        link1688: product.link1688,
+      });
+    }
+  }, [product, form]);
 
   const onSubmit = async (data: FormValues) => {
     try {
@@ -78,7 +99,12 @@ export function EditProductForm({ product, open, onOpenChange, onSuccess }: Edit
         throw new Error(error.error || '更新失败')
       }
 
+      // 获取更新后的产品数据
+      const updatedProduct = await response.json()
+      
       toast.success('更新成功')
+      
+      // 调用onSuccess回调，传递更新后的产品数据
       onSuccess()
       onOpenChange(false)
       

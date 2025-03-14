@@ -28,16 +28,16 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   searchKey?: string
-  onSelectedRowsChange?: (rows: TData[]) => void
-  onToggleActive?: (productId: string, currentStatus: boolean) => Promise<void>
+  onRowSelectionChange?: (selectedRowIds: string[]) => void
+  meta?: Record<string, any>
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   searchKey,
-  onSelectedRowsChange,
-  onToggleActive,
+  onRowSelectionChange,
+  meta,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -80,7 +80,7 @@ export function DataTable<TData, TValue>({
       setRowSelection(newSelection)
       
       // 3. 如果有回调，立即触发
-      if (onSelectedRowsChange) {
+      if (onRowSelectionChange) {
         const selectedRows = table
           .getFilteredRowModel()
           .rows.filter((row) => newSelection[row.id])
@@ -91,7 +91,19 @@ export function DataTable<TData, TValue>({
           selectedRows: selectedRows.length
         })
         
-        onSelectedRowsChange(selectedRows)
+        // 使用类型断言来避免TypeScript错误
+        const selectedIds = selectedRows.map((row) => (row as any).id);
+        onRowSelectionChange(selectedIds)
+      }
+      
+      // 4. 如果有 meta.onRowSelectionChange 回调，也触发它
+      if (meta?.onRowSelectionChange) {
+        const selectedRows = table
+          .getFilteredRowModel()
+          .rows.filter((row) => newSelection[row.id])
+          .map((row) => row.original)
+        
+        meta.onRowSelectionChange(selectedRows)
       }
     },
     onPaginationChange: setPagination,
@@ -104,9 +116,7 @@ export function DataTable<TData, TValue>({
     },
     manualPagination: false,
     pageCount: Math.ceil(data.length / pagination.pageSize),
-    meta: {
-      onToggleActive: onToggleActive,
-    },
+    meta: meta,
   })
 
   // 监听分页变化

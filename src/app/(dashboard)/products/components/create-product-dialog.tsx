@@ -110,10 +110,19 @@ export function CreateProductDialog({
         throw new Error(error.error || "创建失败")
       }
 
+      // 获取创建的产品数据
+      const newProduct = await response.json()
+      
       toast.success("创建成功")
       form.reset()
       onOpenChange(false)
-      onSuccess?.()
+      
+      // 确保onSuccess回调被调用，以刷新产品列表
+      if (onSuccess) {
+        setTimeout(() => {
+          onSuccess()
+        }, 100) // 添加短暂延迟，确保UI状态已更新
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "创建失败")
     } finally {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { DataTable } from "@/components/ui/data-table"
 import { ColumnDef } from "@tanstack/react-table"
-import { ArrowUpDown, Eye, FileText, Plus, Trash } from "lucide-react"
+import { ArrowUpDown, Eye, FileText, Plus, Trash, RefreshCw } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Quotation, Customer } from "@prisma/client"
@@ -22,12 +22,51 @@ type QuotationType = Quotation & {
   customer: Pick<Customer, "name" | "code">
 }
 
-export function QuotationList({ quotations }: { quotations: QuotationType[] }) {
+export function QuotationList({ quotations: initialQuotations }: { quotations: QuotationType[] }) {
   const router = useRouter()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deletePassword, setDeletePassword] = useState("")
   const [quotationToDelete, setQuotationToDelete] = useState<string | null>(null)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
+  const [quotations, setQuotations] = useState<QuotationType[]>(initialQuotations)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // 刷新数据的函数
+  const refreshData = useCallback(async () => {
+    try {
+      setIsRefreshing(true)
+      const response = await fetch('/api/quotations/list', {
+        // 添加缓存控制头，确保获取最新数据
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      })
+      if (!response.ok) {
+        throw new Error('获取报价单列表失败')
+      }
+      const data = await response.json()
+      setQuotations(data)
+      
+      // 同时刷新路由，确保服务器组件也获取最新数据
+      router.refresh()
+    } catch (error) {
+      console.error('刷新数据失败:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [router])
+
+  // 定期自动刷新数据（每60秒）
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      refreshData()
+    }, 60000)
+
+    return () => clearInterval(intervalId)
+  }, [refreshData])
 
   const handleDelete = async (id: string) => {
     setQuotationToDelete(id)
@@ -52,7 +91,9 @@ export function QuotationList({ quotations }: { quotations: QuotationType[] }) {
       }
 
       toast.success('报价单已删除')
-      router.refresh()
+      
+      // 删除成功后立即刷新数据
+      refreshData()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败')
     } finally {
@@ -148,6 +189,15 @@ export function QuotationList({ quotations }: { quotations: QuotationType[] }) {
           </p>
         </div>
         <div className="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            onClick={refreshData} 
+            disabled={isRefreshing}
+            className="gap-1"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? '刷新中...' : '刷新'}
+          </Button>
           <Button onClick={() => router.push("/quotations/new")}>
             <Plus className="mr-2 h-4 w-4" />
             新建报价单
@@ -159,8 +209,10 @@ export function QuotationList({ quotations }: { quotations: QuotationType[] }) {
         columns={columns}
         data={quotations}
         searchKey="number"
-        onSelectedRowsChange={(rows) => {
-          setSelectedRows(rows.map(row => row.id))
+        meta={{
+          onRowSelectionChange: (rows: any[]) => {
+            setSelectedRows(rows.map((row: any) => row.id))
+          }
         }}
       />
 
