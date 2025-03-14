@@ -342,15 +342,54 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/products/import', {
-        method: 'POST',
-        body: formData
-      })
+      // 设置超时处理
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60秒超时
+      
+      try {
+        const response = await fetch('/api/products/import', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+        
+        // 检查响应状态
+        if (!response.ok && response.status !== 409) {
+          // 尝试解析JSON响应
+          let errorMessage = '导入失败'
+          try {
+            const result = await response.json()
+            console.log('导入错误响应:', result)
+            
+            if (result.error) {
+              errorMessage = result.error
+            } else if (result.details && Array.isArray(result.details)) {
+              errorMessage = `导入失败:\n${result.details
+                .map((error: any) => `第 ${error.row} 行: ${error.error}`)
+                .join('\n')}`
+            }
+          } catch (parseError) {
+            // 如果无法解析JSON，可能是HTML错误页面
+            console.error('无法解析错误响应:', parseError)
+            errorMessage = `服务器错误 (${response.status}): 可能是请求超时或服务器内部错误`
+          }
+          
+          throw new Error(errorMessage)
+        }
+        
+        // 解析响应
+        let result
+        try {
+          result = await response.json()
+          console.log('导入响应:', result)
+        } catch (parseError) {
+          console.error('解析响应失败:', parseError)
+          throw new Error('无法解析服务器响应，可能是请求超时')
+        }
 
-      const result = await response.json()
-      console.log('导入响应:', result)
-
-      if (!response.ok) {
+        // 处理重复商品情况
         if (response.status === 409) {
           // 显示重复商品的详细信息
           const duplicateInfo = result.duplicates.map((d: DuplicateProduct) => 
@@ -385,56 +424,70 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
           return
         }
 
-        console.error('导入失败:', result)
+        // 处理部分成功情况
+        if (result.status === 'partial' || result.status === 'partial_success') {
+          const successCount = result.imported || result.success || 0
+          const totalCount = result.total || 0
+          const errorCount = result.errors?.length || 0
+          
+          toast.warning(
+            <div>
+              <p className="font-bold mb-1">部分导入成功</p>
+              <p>成功导入 {successCount} / {totalCount} 条记录</p>
+              {errorCount > 0 && <p>发生 {errorCount} 个错误</p>}
+              <p className="mt-2">建议：将数据拆分为多个较小的文件进行导入</p>
+            </div>,
+            { duration: 10000 }
+          )
+          await refreshProducts()
+          return
+        }
+
+        // 处理超时情况
+        if (result.status === 'timeout') {
+          toast.warning(
+            <div>
+              <p className="font-bold mb-1">导入操作超时</p>
+              <p>{result.message || '导入操作超时，请减小文件大小或分批导入'}</p>
+              <p className="mt-2">建议：将数据拆分为多个较小的文件（每个不超过20个产品）进行导入</p>
+            </div>,
+            { duration: 10000 }
+          )
+          await refreshProducts()
+          return
+        }
+
+        // 处理完全成功情况
+        const successMessage = result.message || `成功导入${result.imported || result.created || 0}个商品`
+        toast.success(successMessage)
+        await refreshProducts()
+      } catch (fetchError) {
+        // 处理fetch错误（包括AbortError）
+        clearTimeout(timeoutId)
         
-        // 显示详细的错误信息
-        if (result.details && Array.isArray(result.details)) {
-          const errorDetails = result.details
-            .map((error: any) => `第 ${error.row} 行: ${error.error}`)
-            .join('\n')
-          throw new Error(`导入失败:\n${errorDetails}`)
+        if (fetchError.name === 'AbortError') {
+          throw new Error('请求超时，请减小文件大小或分批导入')
         }
         
-        throw new Error(result.error || '导入失败')
+        throw fetchError
       }
-
-      // 处理超时情况（状态码202但有timeoutOccurred标志）
-      if (response.status === 202 && result.timeoutOccurred) {
-        toast.warning(
-          <div>
-            <p className="font-bold mb-1">导入部分完成</p>
-            <p>由于执行时间限制，只处理了 {result.processed}/{result.total} 个产品。</p>
-            <p>已创建 {result.created} 个，已更新 {result.updated} 个。</p>
-            <p className="mt-2">建议：将数据拆分为多个较小的文件（每个不超过50个产品）进行导入。</p>
-          </div>,
-          { duration: 10000 }
-        )
-        await refreshProducts()
-        return
-      }
-
-      // 处理部分成功情况
-      if (response.status === 207 || result.status === 'partial_success') {
-        const failedCount = result.failedBatchCount || 0
-        toast.warning(
-          <div>
-            <p className="font-bold mb-1">部分导入成功</p>
-            <p>成功创建 {result.created} 个产品，更新 {result.updated} 个产品</p>
-            <p>{failedCount} 个批次失败</p>
-            <p className="mt-2">请检查日志获取详细信息</p>
-          </div>,
-          { duration: 8000 }
-        )
-        await refreshProducts()
-        return
-      }
-
-      // 处理完全成功情况
-      toast.success(`成功导入${result.created}个商品`)
-      await refreshProducts()
     } catch (error) {
       console.error('导入错误:', error)
-      toast.error(error instanceof Error ? error.message : '导入失败')
+      
+      // 格式化错误消息
+      let errorMessage = error instanceof Error ? error.message : '导入失败'
+      
+      // 检查是否是网络错误
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        errorMessage = '网络错误，请检查您的网络连接'
+      }
+      
+      // 检查是否是超时错误
+      if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+        errorMessage = '请求超时，请减小文件大小或分批导入'
+      }
+      
+      toast.error(errorMessage)
       throw error // 重新抛出错误，让ImportDialog组件知道导入失败
     }
   }

@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Download, Upload, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ImportDialogProps {
   open: boolean
@@ -13,68 +13,113 @@ interface ImportDialogProps {
   onImport: (file: File) => Promise<void>
 }
 
-// 文件大小阈值（字节）
-const LARGE_FILE_THRESHOLD = 100 * 1024; // 100KB - 用于测试，实际可能需要调整
-const VERY_LARGE_FILE_THRESHOLD = 500 * 1024; // 500KB - 用于测试，实际可能需要调整
+// 辅助函数：格式化文件大小
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+// 辅助函数：检查文件是否符合要求
+const validateFile = (file: File): { valid: boolean; error?: string } => {
+  // 检查文件类型
+  if (!file.name.match(/\.(xlsx|xls)$/i)) {
+    return { valid: false, error: '只支持.xlsx或.xls格式的Excel文件' }
+  }
+  
+  // 检查文件大小（10MB限制）
+  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+  if (file.size > MAX_FILE_SIZE) {
+    return { 
+      valid: false, 
+      error: `文件大小超过限制，最大允许10MB，当前文件大小${formatFileSize(file.size)}` 
+    }
+  }
+  
+  return { valid: true }
+}
 
 export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps) {
   console.log('ImportDialog rendered:', { open, onOpenChange })
-  
   const [isLoading, setIsLoading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [fileSizeWarning, setFileSizeWarning] = useState<string | null>(null)
-  
-  // 当对话框关闭时重置状态
-  useEffect(() => {
-    if (!open) {
-      setSelectedFile(null)
-      setFileSizeWarning(null)
-    }
-  }, [open])
+  const [fileError, setFileError] = useState<string | null>(null)
 
-  const handleDownloadTemplate = () => {
-    // 创建一个隐藏的a标签来触发下载
-    const link = document.createElement('a')
-    link.href = '/templates/products_template.xlsx'
-    link.download = 'products_template.xlsx'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await fetch('/api/products/template')
+      if (!response.ok) throw new Error('下载模板失败')
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'products_template.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      toast.error('下载模板失败')
+    }
   }
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    setFileError(null)
+    
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+    
+    // 验证文件
+    const validation = validateFile(file)
+    if (!validation.valid) {
+      setFileError(validation.error)
+      setSelectedFile(null)
+      e.target.value = '' // 重置文件输入
+      return
+    }
     
     setSelectedFile(file)
-    
-    // 检查文件大小并设置警告
-    if (file.size > VERY_LARGE_FILE_THRESHOLD) {
-      setFileSizeWarning(`文件较大 (${(file.size / 1024 / 1024).toFixed(2)}MB)，建议拆分为多个小文件（每个不超过50个产品）以避免超时。`)
-    } else if (file.size > LARGE_FILE_THRESHOLD) {
-      setFileSizeWarning(`文件大小适中 (${(file.size / 1024).toFixed(2)}KB)，如果包含大量产品，可能需要较长处理时间。`)
-    } else {
-      setFileSizeWarning(null)
+  }
+  
+  const handleImportClick = async () => {
+    if (!selectedFile) {
+      setFileError('请选择要导入的文件')
+      return
     }
     
-    handleImport(file)
-  }
-
-  const handleImport = async (file: File) => {
     try {
       setIsLoading(true)
-      await onImport(file)
+      console.log('开始导入文件:', selectedFile.name)
+      await onImport(selectedFile)
+      console.log('导入成功')
+      toast.success('导入成功')
       onOpenChange(false)
+      // 重置状态
+      setSelectedFile(null)
+      setFileError(null)
     } catch (error) {
-      console.error('导入失败:', error)
-      // 错误已经在onImport中处理，这里不需要额外处理
+      console.error('导入错误:', error)
+      // 错误处理已在handleImport函数中完成
     } finally {
       setIsLoading(false)
     }
   }
+  
+  // 关闭对话框时重置状态
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      setSelectedFile(null)
+      setFileError(null)
+    }
+    onOpenChange(open)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>导入商品</DialogTitle>
@@ -93,18 +138,22 @@ export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps
               <li>成本和重量支持最多2位小数</li>
               <li>MOQ必须为整数</li>
               <li>Excel文件大小不能超过10MB</li>
-              <li><strong>大批量导入（超过50个产品）建议拆分为多个小文件</strong></li>
+              <li><strong>大量数据建议分批导入</strong>，每批不超过20个产品</li>
             </ul>
           </div>
           
-          {fileSizeWarning && (
-            <Alert variant="warning" className="bg-amber-50">
+          {fileError && (
+            <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>文件大小提醒</AlertTitle>
-              <AlertDescription>
-                {fileSizeWarning}
-              </AlertDescription>
+              <AlertDescription>{fileError}</AlertDescription>
             </Alert>
+          )}
+          
+          {selectedFile && (
+            <div className="text-sm">
+              <p className="font-medium">已选择文件:</p>
+              <p>{selectedFile.name} ({formatFileSize(selectedFile.size)})</p>
+            </div>
           )}
           
           <div className="flex justify-between">
@@ -112,18 +161,33 @@ export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps
               <Download className="mr-2 h-4 w-4" />
               下载模板
             </Button>
-            <div className="relative">
-              <Button disabled={isLoading}>
-                <Upload className="mr-2 h-4 w-4" />
-                选择文件
+            
+            <div className="flex gap-2">
+              <div className="relative">
+                <Button variant="outline" disabled={isLoading}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  选择文件
+                </Button>
+                <input
+                  type="file"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileSelect}
+                  disabled={isLoading}
+                />
+              </div>
+              
+              <Button 
+                onClick={handleImportClick} 
+                disabled={isLoading || !selectedFile}
+              >
+                {isLoading ? (
+                  <>
+                    <span className="animate-spin mr-2">⏳</span>
+                    导入中...
+                  </>
+                ) : '开始导入'}
               </Button>
-              <input
-                type="file"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                accept=".xlsx,.xls"
-                onChange={handleFileSelect}
-                disabled={isLoading}
-              />
             </div>
           </div>
         </div>
