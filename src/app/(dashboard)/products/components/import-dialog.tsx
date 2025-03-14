@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Download, Upload } from "lucide-react"
+import { Download, Upload, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface ImportDialogProps {
   open: boolean
@@ -12,67 +13,63 @@ interface ImportDialogProps {
   onImport: (file: File) => Promise<void>
 }
 
+// 文件大小阈值（字节）
+const LARGE_FILE_THRESHOLD = 100 * 1024; // 100KB - 用于测试，实际可能需要调整
+const VERY_LARGE_FILE_THRESHOLD = 500 * 1024; // 500KB - 用于测试，实际可能需要调整
+
 export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps) {
   console.log('ImportDialog rendered:', { open, onOpenChange })
+  
   const [isLoading, setIsLoading] = useState(false)
-
-  const handleDownloadTemplate = async () => {
-    try {
-      const response = await fetch('/api/products/template')
-      if (!response.ok) throw new Error('下载模板失败')
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'products_template.xlsx'
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-    } catch (error) {
-      toast.error('下载模板失败')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileSizeWarning, setFileSizeWarning] = useState<string | null>(null)
+  
+  // 当对话框关闭时重置状态
+  useEffect(() => {
+    if (!open) {
+      setSelectedFile(null)
+      setFileSizeWarning(null)
     }
+  }, [open])
+
+  const handleDownloadTemplate = () => {
+    // 创建一个隐藏的a标签来触发下载
+    const link = document.createElement('a')
+    link.href = '/templates/products_template.xlsx'
+    link.download = 'products_template.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) {
-      toast.error('请选择要导入的文件')
-      return
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    
+    setSelectedFile(file)
+    
+    // 检查文件大小并设置警告
+    if (file.size > VERY_LARGE_FILE_THRESHOLD) {
+      setFileSizeWarning(`文件较大 (${(file.size / 1024 / 1024).toFixed(2)}MB)，建议拆分为多个小文件（每个不超过50个产品）以避免超时。`)
+    } else if (file.size > LARGE_FILE_THRESHOLD) {
+      setFileSizeWarning(`文件大小适中 (${(file.size / 1024).toFixed(2)}KB)，如果包含大量产品，可能需要较长处理时间。`)
+    } else {
+      setFileSizeWarning(null)
     }
+    
+    handleImport(file)
+  }
 
+  const handleImport = async (file: File) => {
     try {
       setIsLoading(true)
-      console.log('开始导入文件:', file.name)
       await onImport(file)
-      console.log('导入成功')
-      toast.success('导入成功')
       onOpenChange(false)
     } catch (error) {
-      console.error('导入错误:', error)
-      // 显示错误信息
-      if (error instanceof Error) {
-        const errorMessage = error.message
-        if (errorMessage.includes('\n')) {
-          // 如果错误信息包含换行符，说明是详细的错误信息
-          toast.error(
-            <div className="whitespace-pre-wrap">
-              {errorMessage}
-            </div>,
-            {
-              duration: 10000 // 显示10秒
-            }
-          )
-        } else {
-          toast.error(errorMessage)
-        }
-      } else {
-        toast.error('导入失败')
-      }
+      console.error('导入失败:', error)
+      // 错误已经在onImport中处理，这里不需要额外处理
     } finally {
       setIsLoading(false)
-      e.target.value = '' // 重置文件输入
     }
   }
 
@@ -96,8 +93,20 @@ export function ImportDialog({ open, onOpenChange, onImport }: ImportDialogProps
               <li>成本和重量支持最多2位小数</li>
               <li>MOQ必须为整数</li>
               <li>Excel文件大小不能超过10MB</li>
+              <li><strong>大批量导入（超过50个产品）建议拆分为多个小文件</strong></li>
             </ul>
           </div>
+          
+          {fileSizeWarning && (
+            <Alert variant="warning" className="bg-amber-50">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>文件大小提醒</AlertTitle>
+              <AlertDescription>
+                {fileSizeWarning}
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <div className="flex justify-between">
             <Button variant="outline" onClick={handleDownloadTemplate}>
               <Download className="mr-2 h-4 w-4" />

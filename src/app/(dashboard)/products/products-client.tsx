@@ -398,6 +398,38 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         throw new Error(result.error || '导入失败')
       }
 
+      // 处理超时情况（状态码202但有timeoutOccurred标志）
+      if (response.status === 202 && result.timeoutOccurred) {
+        toast.warning(
+          <div>
+            <p className="font-bold mb-1">导入部分完成</p>
+            <p>由于执行时间限制，只处理了 {result.processed}/{result.total} 个产品。</p>
+            <p>已创建 {result.created} 个，已更新 {result.updated} 个。</p>
+            <p className="mt-2">建议：将数据拆分为多个较小的文件（每个不超过50个产品）进行导入。</p>
+          </div>,
+          { duration: 10000 }
+        )
+        await refreshProducts()
+        return
+      }
+
+      // 处理部分成功情况
+      if (response.status === 207 || result.status === 'partial_success') {
+        const failedCount = result.failedBatchCount || 0
+        toast.warning(
+          <div>
+            <p className="font-bold mb-1">部分导入成功</p>
+            <p>成功创建 {result.created} 个产品，更新 {result.updated} 个产品</p>
+            <p>{failedCount} 个批次失败</p>
+            <p className="mt-2">请检查日志获取详细信息</p>
+          </div>,
+          { duration: 8000 }
+        )
+        await refreshProducts()
+        return
+      }
+
+      // 处理完全成功情况
       toast.success(`成功导入${result.created}个商品`)
       await refreshProducts()
     } catch (error) {

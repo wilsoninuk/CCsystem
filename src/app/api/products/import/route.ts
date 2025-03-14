@@ -37,8 +37,9 @@ const generateBarcode = (itemNo: string): string => {
 }
 
 // 批量处理配置
-const BATCH_SIZE = 20 // 每批处理的产品数量
-const BATCH_DELAY = 300 // 批次间延迟（毫秒）
+const BATCH_SIZE = process.env.VERCEL === '1' ? 5 : 20 // Vercel环境使用更小的批次
+const BATCH_DELAY = process.env.VERCEL === '1' ? 200 : 300 // Vercel环境使用更短的延迟
+const MAX_EXECUTION_TIME = 45000 // 最大执行时间45秒
 
 // 辅助函数：将数组分割成指定大小的批次
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -54,7 +55,15 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// 辅助函数：检查是否接近超时
+function isNearTimeout(startTime: number, maxTime: number): boolean {
+  return (Date.now() - startTime) > (maxTime * 0.8) // 如果已经使用了80%的最大时间
+}
+
 export async function POST(request: Request) {
+  // 记录开始时间，用于超时检测
+  const startTime = Date.now()
+  
   try {
     // 1. 获取当前用户会话
     const session = await getServerSession(authOptions)
@@ -97,9 +106,7 @@ export async function POST(request: Request) {
     let totalCount = 0
     let failedBatches = [] // 记录失败的批次
     let batchErrors = [] // 记录批次错误
-
-    // 记录开始时间，用于计算总耗时
-    const startTime = Date.now()
+    let timeoutOccurred = false // 标记是否发生超时
 
     const workbook = new ExcelJS.Workbook()
     
@@ -349,6 +356,13 @@ export async function POST(request: Request) {
         console.log(`开始处理 ${updateBatches.length} 个更新批次`)
         
         for (let i = 0; i < updateBatches.length; i++) {
+          // 检查是否接近超时
+          if (isNearTimeout(startTime, MAX_EXECUTION_TIME)) {
+            console.log('接近执行时间限制，中断处理')
+            timeoutOccurred = true
+            break
+          }
+          
           const batch = updateBatches[i]
           console.log(`处理更新批次 ${i + 1}/${updateBatches.length}，包含 ${batch.length} 个产品`)
           
@@ -413,10 +427,17 @@ export async function POST(request: Request) {
       }
 
       // 处理创建批次
-      if (createBatches.length > 0) {
+      if (createBatches.length > 0 && !timeoutOccurred) {
         console.log(`开始处理 ${createBatches.length} 个创建批次`)
         
         for (let i = 0; i < createBatches.length; i++) {
+          // 检查是否接近超时
+          if (isNearTimeout(startTime, MAX_EXECUTION_TIME)) {
+            console.log('接近执行时间限制，中断处理')
+            timeoutOccurred = true
+            break
+          }
+          
           const batch = createBatches[i]
           console.log(`处理创建批次 ${i + 1}/${createBatches.length}，包含 ${batch.length} 个产品`)
           
@@ -483,23 +504,38 @@ export async function POST(request: Request) {
       const totalTimeSec = Math.round(totalTimeMs / 1000)
       
       // 确定整体状态
-      const hasFailures = failedBatches.length > 0
-      const status = hasFailures ? 'partial_success' : 'success'
+      const hasFailures = failedBatches.length > 0 || timeoutOccurred
+      let status = 'success'
+      if (timeoutOccurred) {
+        status = 'timeout'
+      } else if (hasFailures) {
+        status = 'partial_success'
+      }
+      
+      // 构建响应消息
+      let message = `导入成功：创建 ${createdCount} 个产品，更新 ${updatedCount} 个产品`
+      if (timeoutOccurred) {
+        message = `导入部分完成：由于执行时间限制，只处理了 ${processedCount}/${totalCount} 个产品。已创建 ${createdCount} 个，已更新 ${updatedCount} 个。`
+        message += `建议将数据拆分为多个较小的文件（每个不超过50个产品）进行导入。`
+      } else if (hasFailures) {
+        message = `部分导入成功：成功创建 ${createdCount} 个产品，更新 ${updatedCount} 个产品，${failedBatches.length} 个批次失败`
+      }
       
       return NextResponse.json({
         status,
         created: createdCount,
         updated: updatedCount,
+        processed: processedCount,
+        total: totalCount,
         errors: errors.length > 0 ? errors : undefined,
         totalTime: `${totalTimeSec}秒`,
-        averageTimePerItem: totalCount > 0 ? `${Math.round(totalTimeMs / totalCount)}毫秒` : '0毫秒',
+        averageTimePerItem: processedCount > 0 ? `${Math.round(totalTimeMs / processedCount)}毫秒` : '0毫秒',
         failedBatchCount: failedBatches.length,
         failedBatches: hasFailures ? failedBatches : undefined,
         batchErrors: hasFailures ? batchErrors : undefined,
-        message: hasFailures 
-          ? `部分导入成功：成功创建 ${createdCount} 个产品，更新 ${updatedCount} 个产品，${failedBatches.length} 个批次失败` 
-          : `导入成功：创建 ${createdCount} 个产品，更新 ${updatedCount} 个产品`
-      }, { status: hasFailures ? 207 : 200 }) // 使用207表示部分成功
+        timeoutOccurred,
+        message
+      }, { status: timeoutOccurred ? 202 : (hasFailures ? 207 : 200) }) // 202表示接受但处理未完成，207表示部分成功
 
     } catch (error) {
       console.error('数据库操作失败:', error)
