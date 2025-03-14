@@ -6,6 +6,9 @@ CREATE TABLE "User" (
     "password" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "image" TEXT,
+    "emailVerified" TIMESTAMP(3),
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -35,6 +38,19 @@ CREATE TABLE "Product" (
     "updatedBy" TEXT,
 
     CONSTRAINT "Product_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductImage" (
+    "id" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "isMain" BOOLEAN NOT NULL DEFAULT false,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "productId" TEXT NOT NULL,
+
+    CONSTRAINT "ProductImage_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -80,6 +96,7 @@ CREATE TABLE "Quotation" (
     "totalAmountUSD" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "shippingDate" TIMESTAMP(3),
     "number" TEXT NOT NULL,
     "remark" TEXT,
     "userId" TEXT NOT NULL,
@@ -143,6 +160,77 @@ CREATE TABLE "ProductQuote" (
     CONSTRAINT "ProductQuote_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Account" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "providerAccountId" TEXT NOT NULL,
+    "refresh_token" TEXT,
+    "access_token" TEXT,
+    "expires_at" INTEGER,
+    "token_type" TEXT,
+    "scope" TEXT,
+    "id_token" TEXT,
+    "session_state" TEXT,
+
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Session" (
+    "id" TEXT NOT NULL,
+    "sessionToken" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "expires" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CustomerProductHistory" (
+    "id" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "priceRMB" DOUBLE PRECISION NOT NULL,
+    "priceUSD" DOUBLE PRECISION NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "shippedAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CustomerProductHistory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CommercialInvoice" (
+    "id" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "shippingDate" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "remark" TEXT,
+
+    CONSTRAINT "CommercialInvoice_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CommercialInvoiceItem" (
+    "id" TEXT NOT NULL,
+    "ciId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "priceRMB" DOUBLE PRECISION NOT NULL,
+    "priceUSD" DOUBLE PRECISION NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CommercialInvoiceItem_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -154,6 +242,12 @@ CREATE INDEX "Product_createdBy_idx" ON "Product"("createdBy");
 
 -- CreateIndex
 CREATE INDEX "Product_updatedBy_idx" ON "Product"("updatedBy");
+
+-- CreateIndex
+CREATE INDEX "ProductImage_productId_idx" ON "ProductImage"("productId");
+
+-- CreateIndex
+CREATE INDEX "ProductImage_isMain_idx" ON "ProductImage"("isMain");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Customer_code_key" ON "Customer"("code");
@@ -179,11 +273,53 @@ CREATE INDEX "ProductQuote_productId_idx" ON "ProductQuote"("productId");
 -- CreateIndex
 CREATE INDEX "ProductQuote_customerId_idx" ON "ProductQuote"("customerId");
 
+-- CreateIndex
+CREATE INDEX "Account_userId_idx" ON "Account"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Session_sessionToken_key" ON "Session"("sessionToken");
+
+-- CreateIndex
+CREATE INDEX "Session_userId_idx" ON "Session"("userId");
+
+-- CreateIndex
+CREATE INDEX "CustomerProductHistory_customerId_idx" ON "CustomerProductHistory"("customerId");
+
+-- CreateIndex
+CREATE INDEX "CustomerProductHistory_productId_idx" ON "CustomerProductHistory"("productId");
+
+-- CreateIndex
+CREATE INDEX "CustomerProductHistory_shippedAt_idx" ON "CustomerProductHistory"("shippedAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CommercialInvoice_number_key" ON "CommercialInvoice"("number");
+
+-- CreateIndex
+CREATE INDEX "CommercialInvoice_customerId_idx" ON "CommercialInvoice"("customerId");
+
+-- CreateIndex
+CREATE INDEX "CommercialInvoice_status_idx" ON "CommercialInvoice"("status");
+
+-- CreateIndex
+CREATE INDEX "CommercialInvoice_shippingDate_idx" ON "CommercialInvoice"("shippingDate");
+
+-- CreateIndex
+CREATE INDEX "CommercialInvoiceItem_ciId_idx" ON "CommercialInvoiceItem"("ciId");
+
+-- CreateIndex
+CREATE INDEX "CommercialInvoiceItem_productId_idx" ON "CommercialInvoiceItem"("productId");
+
 -- AddForeignKey
 ALTER TABLE "Product" ADD CONSTRAINT "Product_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Product" ADD CONSTRAINT "Product_updatedBy_fkey" FOREIGN KEY ("updatedBy") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductImage" ADD CONSTRAINT "ProductImage_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CustomerProductPrice" ADD CONSTRAINT "CustomerProductPrice_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -211,3 +347,24 @@ ALTER TABLE "ProductQuote" ADD CONSTRAINT "ProductQuote_customerId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "ProductQuote" ADD CONSTRAINT "ProductQuote_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CustomerProductHistory" ADD CONSTRAINT "CustomerProductHistory_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CustomerProductHistory" ADD CONSTRAINT "CustomerProductHistory_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommercialInvoice" ADD CONSTRAINT "CommercialInvoice_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommercialInvoiceItem" ADD CONSTRAINT "CommercialInvoiceItem_ciId_fkey" FOREIGN KEY ("ciId") REFERENCES "CommercialInvoice"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CommercialInvoiceItem" ADD CONSTRAINT "CommercialInvoiceItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -3,6 +3,58 @@ import { authOptions } from "../../auth/[...nextauth]/route"
 import { prisma } from "@/lib/db"
 import { NextResponse } from "next/server"
 
+// 添加GET方法，用于获取单个产品的详细信息
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const include = searchParams.get('include')
+    
+    // 解析include参数
+    const includeOptions = include ? include.split(',') : []
+    
+    const product = await prisma.product.findUnique({
+      where: { id: params.id },
+      include: {
+        images: includeOptions.includes('images'),
+        creator: includeOptions.includes('creator') ? {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
+          }
+        } : false,
+        updater: includeOptions.includes('updater') ? {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true
+          }
+        } : false
+      }
+    })
+    
+    if (!product) {
+      return NextResponse.json(
+        { error: "产品不存在" },
+        { status: 404 }
+      )
+    }
+    
+    return NextResponse.json(product)
+  } catch (error) {
+    console.error('获取产品详情失败:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '获取产品详情失败' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }

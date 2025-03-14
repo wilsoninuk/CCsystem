@@ -263,13 +263,42 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
       const product = row.original
       const [editOpen, setEditOpen] = useState(false)
       const router = useRouter()
+      
+      // 添加状态来存储当前要编辑的产品
+      const [currentProduct, setCurrentProduct] = useState(product)
+      
+      // 在打开编辑弹窗前获取最新的产品数据
+      const handleEditClick = async () => {
+        try {
+          // 获取最新的产品数据
+          const response = await fetch(`/api/products/${product.id}?include=images,creator,updater`)
+          if (!response.ok) {
+            throw new Error('获取产品数据失败')
+          }
+          const updatedProduct = await response.json()
+          setCurrentProduct(updatedProduct)
+          setEditOpen(true)
+        } catch (error) {
+          console.error('获取产品数据失败:', error)
+          toast.error('获取产品数据失败')
+          // 如果获取失败，仍然使用当前行的产品数据
+          setCurrentProduct(product)
+          setEditOpen(true)
+        }
+      }
 
       return (
         <div className="flex justify-end gap-2">
           <Button
             variant={product.isActive ? "destructive" : "default"}
             size="sm"
-            onClick={() => table.options.meta?.onToggleActive?.(product.id, product.isActive)}
+            onClick={() => {
+              // 使用类型断言来避免TypeScript错误
+              const meta = table.options.meta as any;
+              if (meta?.onToggleActive) {
+                meta.onToggleActive(product.id, product.isActive);
+              }
+            }}
             className={product.isActive ? "hover:bg-red-600" : "hover:bg-green-600"}
           >
             {product.isActive ? "下线" : "上线"}
@@ -277,16 +306,23 @@ export const columns: ColumnDef<ProductWithRelations>[] = [
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setEditOpen(true)}
+            onClick={handleEditClick}
           >
             <Edit className="h-4 w-4" />
           </Button>
           <EditProductForm
-            product={product}
+            product={currentProduct}
             open={editOpen}
             onOpenChange={setEditOpen}
             onSuccess={() => {
+              // 刷新表格数据
               router.refresh()
+              
+              // 重新获取当前产品的最新数据
+              const meta = table.options.meta as any;
+              if (meta?.refreshProduct) {
+                meta.refreshProduct(product.id);
+              }
             }}
           />
         </div>

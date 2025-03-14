@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation"
 import { CreateProductDialog } from "./components/create-product-dialog"
 import { ColumnSelectDialog } from "./components/column-select-dialog"
 import { ExportProgressDialog } from "@/components/export-progress-dialog"
-import { ColumnDef } from "@/components/ui/data-table"
+import { ColumnDef } from "@tanstack/react-table"
 
 console.log('ImportDialog imported:', ImportDialog)
 
@@ -419,6 +419,28 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
       toast.error('刷新商品列表失败')
     }
   }
+  
+  // 刷新单个产品
+  const refreshProduct = async (productId: string) => {
+    try {
+      const response = await fetch(`/api/products/${productId}?include=images,creator,updater`)
+      if (!response.ok) throw new Error('获取产品详情失败')
+      const updatedProduct = await response.json()
+      
+      // 更新本地状态中的产品数据
+      setProducts(prevProducts =>
+        prevProducts.map(product =>
+          product.id === productId ? updatedProduct : product
+        )
+      )
+      
+      return updatedProduct
+    } catch (error) {
+      console.error('刷新产品详情失败:', error)
+      toast.error('刷新产品详情失败')
+      return null
+    }
+  }
 
   // 添加商品上下线处理函数
   const handleToggleActive = async (productId: string, currentStatus: boolean) => {
@@ -562,14 +584,14 @@ export function ProductsClient({ products: initialProducts }: ProductsClientProp
         onColumnsChange={(cols) => setVisibleColumns(cols as ColumnDef<ProductWithRelations>[])}
       />
 
-      <DataTable 
+      <DataTable
         columns={visibleColumns}
         data={filteredProducts}
-        searchKey="itemNo"
-        onSelectedRowsChange={(rows) => {
-          setSelectedRows(rows.map(row => row.id))
+        onRowSelectionChange={setSelectedRows}
+        meta={{
+          onToggleActive: handleToggleActive,
+          refreshProduct: refreshProduct
         }}
-        onToggleActive={handleToggleActive}
       />
 
       {/* 导出进度对话框 */}
